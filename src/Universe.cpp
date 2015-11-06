@@ -37,7 +37,7 @@ void reset_universe_id() {
 Universe::Universe(const int id, const char* name) {
 
   /* If the user did not define an optional ID, create one */
-  if (id == 0)
+  if (id == -1)
     _id = cell_id();
 
   /* Use the user-defined ID */
@@ -61,10 +61,12 @@ Universe::Universe(const int id, const char* name) {
  * @brief Destructor clears the Cell pointers container.
  */
 Universe::~Universe() {
-  _cells.clear();
 
   if (_name != NULL)
     delete [] _name;
+
+  /* Clear the map of Cells */
+  _cells.clear();
 }
 
 
@@ -174,7 +176,7 @@ double Universe::getMinY() {
  * @brief Returns the maximum reachable y-coordinate in the Universe.
  * @return the maximum reachable y-coordinate
  */
-double Universe::getMaxY(){
+double Universe::getMaxY() {
 
   double max_y = -std::numeric_limits<double>::infinity();
 
@@ -310,51 +312,6 @@ boundaryType Universe::getMaxYBoundaryType() {
   }
 
   return bc_y;
-}
-
-
-/**
- * @brief Returns the boundary conditions (VACUUM or REFLECTIVE) at the minimum
- *         reachable z-coordinate in the Universe.
- * @return the boundary conditions at the minimum reachable z-coordinate
- */
-boundaryType Universe::getMinZBoundaryType() {
-
-  double min_z = std::numeric_limits<double>::infinity();
-  boundaryType bc_z = REFLECTIVE;
-
-  std::map<int, Cell*>::iterator iter;
-  for (iter = _cells.begin(); iter != _cells.end(); ++iter) {
-
-    if (min_z > iter->second->getMinZ()) {
-      min_z = iter->second->getMinZ();
-      bc_z = iter->second->getMinZBoundaryType();
-    }
-  }
-
-  return bc_z;
-}
-
-
-/**
- * @brief Returns the boundary conditions (VACUUM or REFLECTIVE) at the maximum
- *         reachable z-coordinate in the Universe.
- * @return the boundary conditions at the maximum reachable z-coordinate
- */
-boundaryType Universe::getMaxZBoundaryType() {
-
-  double max_z = -std::numeric_limits<double>::infinity();
-  boundaryType bc_z = REFLECTIVE;
-
-  std::map<int, Cell*>::iterator iter;
-  for (iter = _cells.begin(); iter != _cells.end(); ++iter) {
-    if (max_z < iter->second->getMaxZ()) {
-      max_z = iter->second->getMaxZ();
-      bc_z = iter->second->getMaxZBoundaryType();
-    }
-  }
-
-  return bc_z;
 }
 
 
@@ -591,7 +548,8 @@ Cell* Universe::findCell(LocalCoords* coords) {
         LocalCoords* next_coords;
 
         if (coords->getNext() == NULL)
-          next_coords = new LocalCoords(coords->getX(), coords->getY());
+          next_coords = new LocalCoords(coords->getX(), coords->getY(),
+                                        coords->getZ());
         else
           next_coords = coords->getNext();
 
@@ -729,13 +687,15 @@ Universe* Universe::clone() {
 Lattice::Lattice(const int id, const char* name): Universe(id, name) {
 
   _type = LATTICE;
-  _offset.setCoords(0.0, 0.0);
+  _offset.setCoords(0.0, 0.0, 0.0);
 
   /* Default width and number of Lattice cells along each dimension */
-  _num_y = 0;
-  _num_x = 0;
+  _num_x = -1;
+  _num_y = -1;
+  _num_z = -1;
   _width_x = 0;
   _width_y = 0;
+  _width_z = 0;
 }
 
 
@@ -744,8 +704,12 @@ Lattice::Lattice(const int id, const char* name): Universe(id, name) {
  */
 Lattice::~Lattice() {
 
-  for (int i=0; i < _num_y; i++)
-    _universes.at(i).clear();
+  /* Clear the triple-nested vector of Universes */
+  for (int k=0; k < _num_z; k++) {
+    for (int j=0; j < _num_y; j++)
+      _universes.at(k).at(j).clear();
+    _universes.at(k).clear();
+  }
 
   _universes.clear();
 }
@@ -761,10 +725,12 @@ Lattice::~Lattice() {
  *          and up 2 cm.
  * @param x the offset in the x direction
  * @param y the offset in the y direction
+ * @param z the offset in the z direction
  */
-void Lattice::setOffset(double x, double y) {
+void Lattice::setOffset(double x, double y, double z) {
   _offset.setX(x);
   _offset.setY(y);
+  _offset.setZ(z);
 }
 
 
@@ -796,6 +762,15 @@ int Lattice::getNumY() const {
 
 
 /**
+ * @brief Return the number of Lattice cells along the z-axis
+ * @return the number of Lattice cells along z
+ */
+int Lattice::getNumZ() const {
+  return _num_z;
+}
+
+
+/**
  * @brief Return the width of the Lattice along the x-axis.
  * @return the width of the Lattice cells along x
  */
@@ -810,6 +785,15 @@ double Lattice::getWidthX() const {
  */
 double Lattice::getWidthY() const {
   return _width_y;
+}
+
+
+/**
+ * @brief Return the width of the Lattice along the z-axis.
+ * @return the width of the Lattice cells along z
+ */
+double Lattice::getWidthZ() const {
+  return _width_z;
 }
 
 
@@ -844,7 +828,7 @@ double Lattice::getMinY() {
  * @brief Returns the maximum reachable y-coordinate in the Lattice.
  * @return the maximum reachable y-coordinate
  */
-double Lattice::getMaxY(){
+double Lattice::getMaxY() {
   return _offset.getY() + (_num_y * _width_y / 2.);
 }
 
@@ -854,7 +838,7 @@ double Lattice::getMaxY(){
  * @return the minimum reachable z-coordinate
  */
 double Lattice::getMinZ() {
-  return -std::numeric_limits<double>::infinity();
+  return _offset.getZ() - (_num_z * _width_z / 2.);
 }
 
 
@@ -863,7 +847,7 @@ double Lattice::getMinZ() {
  * @return the maximum reachable z-coordinate
  */
 double Lattice::getMaxZ() {
-  return std::numeric_limits<double>::infinity();
+  return _offset.getZ() + (_num_z * _width_z / 2.);
 }
 
 
@@ -871,28 +855,30 @@ double Lattice::getMaxZ() {
  * @brief Returns a pointer to the Universe within a specific Lattice cell.
  * @param lat_x the x index to the Lattice cell
  * @param lat_y the y index to the Lattice cell
+ * @param lat_z the z index to the Lattice cell
  * @return pointer to a Universe filling the Lattice cell
  */
-Universe* Lattice::getUniverse(int lat_x, int lat_y) const {
+Universe* Lattice::getUniverse(int lat_x, int lat_y, int lat_z) const {
 
   /* Checks that lattice indices are within the bounds of the lattice */
-  if (lat_x > _num_x || lat_y > _num_y)
+  if (lat_x >= _num_x || lat_y >= _num_y || lat_z >= _num_z ||
+      lat_x < 0 || lat_y < 0 || lat_z < 0)
     log_printf(ERROR, "Cannot retrieve Universe from Lattice ID = %d: Index"
-               "out of bounds: Tried to access Cell x = %d, y = %d but bounds"
-               "are x = %d, y = %d", _id, lat_x, lat_y, _num_x, _num_y);
+               "out of bounds: Tried to access Cell x = %d, y = %d, "
+               "z = %d but bounds are x = %d, y = %d, z = %d",
+               _id, lat_x, lat_y, lat_z, _num_x, _num_y, _num_z);
 
-  return _universes.at(lat_y).at(lat_x).second;
+  return _universes.at(lat_z).at(lat_y).at(lat_x).second;
 }
 
 
 /**
- * @brief Return a 2D vector of the Universes in the Lattice.
- * @return 2D vector of Universes
+ * @brief Return a 3D vector of the Universes in the Lattice.
+ * @return 3D vector of Universes
  */
-std::vector<std::vector<std::pair<int, Universe*>>>
-  Lattice::getUniverses() const {
-
-  return _universes;
+std::vector< std::vector< std::vector< std::pair<int, Universe*> > > >*
+  Lattice::getUniverses() {
+  return &_universes;
 }
 
 
@@ -907,11 +893,14 @@ std::map<int, Universe*> Lattice::getUniqueUniverses() {
 
   std::map<int, Universe*> unique_universes;
   Universe* universe;
+  int univ_id;
 
-  for (int i = _num_y-1; i > -1;  i--) {
-    for (int j = 0; j < _num_x; j++) {
-      universe = _universes.at(i).at(j).second;
-      unique_universes[universe->getId()] = universe;
+  for (int k = _num_z-1; k > -1; k--) {
+    for (int j = _num_y-1; j > -1;  j--) {
+      for (int i = 0; i < _num_x; i++) {
+        universe = _universes.at(k).at(j).at(i).second;
+        unique_universes[universe->getId()] = universe;
+      }
     }
   }
 
@@ -932,7 +921,7 @@ std::map<int, Cell*> Lattice::getAllCells() {
   std::map<int, Universe*>::iterator iter;
   std::map<int, Cell*> nested_cells;
 
-  for (iter = unique_universes.begin(); iter != unique_universes.end(); ++iter){
+  for (iter = unique_universes.begin(); iter != unique_universes.end(); ++iter) {
     nested_cells = iter->second->getAllCells();
     cells.insert(nested_cells.begin(), nested_cells.end());
   }
@@ -962,7 +951,7 @@ std::map<int, Universe*> Lattice::getAllUniverses() {
   std::map<int, Universe*>::iterator iter;
   std::map<int, Universe*> nested_universes;
 
-  for (iter = unique_universes.begin(); iter != unique_universes.end(); ++iter){
+  for (iter = unique_universes.begin(); iter != unique_universes.end(); ++iter) {
     nested_universes = iter->second->getAllUniverses();
     all_universes.insert(nested_universes.begin(), nested_universes.end());
   }
@@ -990,45 +979,69 @@ void Lattice::setNumY(int num_y) {
 
 
 /**
+ * @brief Set the number of Lattice cells along the z-axis.
+ * @param num_z the number of Lattice cells along z
+ */
+void Lattice::setNumZ(int num_z) {
+  _num_z = num_z;
+}
+
+
+/**
  * @brief Set the width of each Lattice cell.
  * @param width_x the width along the x-axis in centimeters
  * @param width_y the width along the y-axis in centimeters
+ * @param width_z the width along the z-axis in centimeters
  */
-void Lattice::setWidth(double width_x, double width_y) {
+void Lattice::setWidth(double width_x, double width_y, double width_z) {
 
-  if (width_x <= 0 || width_y <= 0)
+  if (width_x <= 0 || width_y <= 0 || width_z <= 0)
     log_printf(ERROR, "Unable to set the width of Lattice ID = %d "
-               "for x = %f and y = %f since they are not positive values",
-               _id, width_x, width_y);
+               "for x = %f, y = %f, and z = %f since they are not positive "
+               "values", _id, width_x, width_y, _width_z);
 
   _width_x = width_x;
   _width_y = width_y;
+  _width_z = width_z;
 }
 
 
 /**
  * @brief Sets the array of Universe pointers filling each Lattice cell.
  * @details This is a helper method for SWIG to allow users to assign Universes
- *          to a Lattice using a 2D Python list (list of lists). An example
- *          how this method can be called from Python is as follows:
+ *          to a Lattice using a 3D Python list (list of lists of lists). An
+ *          example how this method can be called from Python is as follows:
  *
  * @code
  *          u1 = Universe(name='Universe 1')
  *          u2 = Universe(name='Universe 2')
  *          u3 = Universe(name='Universe 3')
- *          lattice.setLatticeCells([[u1, u2, u1, u2],
- *                                   [u2, u3, u2, u3],
- *                                   [u1, u2, u1, u2],
- *                                   [u2, u3, u2, u3]])
+ *          lattice.setUniverses([[[u1, u2, u1, u2],
+ *                                 [u2, u3, u2, u3],
+ *                                 [u1, u2, u1, u2],
+ *                                 [u2, u3, u2, u3]],
+ *                                [[u1, u2, u1, u2],
+ *                                 [u2, u3, u2, u3],
+ *                                 [u1, u2, u1, u2],
+ *                                 [u2, u3, u2, u3]]])
  * @endcode
  *
+ * @param num_z the number of Lattice cells along z
  * @param num_y the number of Lattice cells along y
  * @param num_x the number of Lattice cells along x
  * @param universes the array of Universes for each Lattice cell
  */
-void Lattice::setUniverses(int num_y, int num_x, Universe** universes) {
+void Lattice::setUniverses(int num_z, int num_y, int num_x,
+                           Universe** universes) {
 
-  /* Clear any Universes in the Lattice (from a previous run) */
+  std::map<int, Universe*> unique_universes = getUniqueUniverses();
+  std::map<int, Universe*>::iterator iter;
+
+  /* Remove all Universes in the Lattice */
+  for (iter = unique_universes.begin(); iter != unique_universes.end(); ++iter)
+    removeUniverse(iter->second);
+
+  /* Clear all Universe maps in the Lattice (from a previous run) */
   for (int i=0; i < _num_y; i++)
     _universes.at(i).clear();
 
@@ -1037,23 +1050,50 @@ void Lattice::setUniverses(int num_y, int num_x, Universe** universes) {
   /* Set the Lattice dimensions */
   setNumX(num_x);
   setNumY(num_y);
+  setNumZ(num_z);
 
   Universe* universe;
 
   /* The Lattice cells are assumed input in row major order starting from the
    * upper left corner. This double loop reorders the Lattice cells from the
-   * to start from the lower left corner */
-  for (int j = 0; j < _num_y; j++) {
+   * start from the lower left corner */
+  for (int k = 0; k < _num_z; k++) {
+    _universes.push_back(
+        std::vector< std::vector< std::pair<int, Universe*> > >());
+    for (int j = 0; j < _num_y; j++) {
 
-    _universes.push_back(std::vector< std::pair<int, Universe*> >());
+      _universes.at(k).push_back(std::vector< std::pair<int, Universe*> >());
 
-    for (int i = 0; i < _num_x; i++){
-      universe = universes[(_num_y-1-j)*_num_x + i];
-      _universes.at(j).push_back(std::pair<int, Universe*>
-                                 (universe->getId(), universe));
+      for (int i = 0; i < _num_x; i++) {
+        universe = universes
+            [(_num_z-1-k)*_num_x*_num_y + (_num_y-1-j)*_num_x + i];
+        _universes.at(k).at(j).push_back(std::pair<int, Universe*>(
+            universe->getId(), universe));
+      }
     }
   }
 }
+
+
+/**
+ * @brief Removes all references to a Universe from the Lattice.
+ * @param universe the Universe to remove
+ */
+void Lattice::removeUniverse(Universe* universe) {
+
+  Universe* null = NULL;
+
+  /* Clear any Universes in the Lattice (from a previous run) */
+  for (int k=0; k < _num_z; k++) {
+    for (int j=0; j < _num_y; j++) {
+      for (int i=0; i < _num_x; i++) {
+        if (universe->getId() == getUniverse(i,j,k)->getId())
+          _universes.at(k).at(j).at(i) = std::pair<int,Universe*>(-1, null);
+      }
+    }
+  }
+}
+
 
 
 /**
@@ -1085,18 +1125,25 @@ bool Lattice::withinBounds(Point* point) {
   double bound_x_min = _offset.getX() - _num_x/2.0 * _width_x;
   double bound_y_max = _offset.getY() + _num_y/2.0 * _width_y;
   double bound_y_min = _offset.getY() - _num_y/2.0 * _width_y;
+  double bound_z_max = _offset.getZ() + _num_z/2.0 * _width_z;
+  double bound_z_min = _offset.getZ() - _num_z/2.0 * _width_z;
 
   double x = point->getX();
   double y = point->getY();
+  double z = point->getZ();
 
   /* If the Point is outside the x bounds */
   if (x > bound_x_max || x < bound_x_min)
     return false;
 
-  /* If the Point is outside the y boounds */
+  /* If the Point is outside the y bounds */
   else if (y > bound_y_max || y < bound_y_min)
     return false;
 
+  /* If the Point is outside the z bounds */
+  else if (z > bound_z_max || z < bound_z_min)
+    return false;
+  
   /* If the Point is within the bounds */
   else
     return true;
@@ -1116,39 +1163,50 @@ Cell* Lattice::findCell(LocalCoords* coords) {
   /* Set the LocalCoord to be a LAT type at this level */
   coords->setType(LAT);
 
-  /* Compute the x and y indices for the Lattice cell this coord is in */
+  /* Compute the x, y, and z indices for the Lattice cell this coord is in */
   int lat_x = getLatX(coords->getPoint());
   int lat_y = getLatY(coords->getPoint());
-
+  int lat_z = getLatZ(coords->getPoint());
+  double next_x, next_y, next_z;
+  
   /* If the indices are outside the bound of the Lattice */
   if (lat_x < 0 || lat_x >= _num_x ||
-      lat_y < 0 || lat_y >= _num_y) {
+      lat_y < 0 || lat_y >= _num_y ||
+      lat_z < 0 || lat_z >= _num_z) {
     return NULL;
   }
 
   /* Compute local position of Point in the next level Universe */
-  double nextX = coords->getX()
-      - (-_width_x*_num_x/2.0 + _offset.getX() + (lat_x + 0.5) * _width_x)
-      + getOffset()->getX();
-  double nextY = coords->getY()
-      - (-_width_y*_num_y/2.0 + _offset.getY() + (lat_y + 0.5) * _width_y)
-      + getOffset()->getY();
+  next_x = coords->getX() -
+    (-_width_x*_num_x/2.0 + _offset.getX() + (lat_x + 0.5) * _width_x) +
+    getOffset()->getX();
+  next_y = coords->getY() -
+    (-_width_y*_num_y/2.0 + _offset.getY() + (lat_y + 0.5) * _width_y) +
+    getOffset()->getY();
+
+  if (_width_z == std::numeric_limits<double>::infinity())
+    next_z = coords->getZ();
+  else
+    next_z = coords->getZ() -
+      (-_width_z*_num_z/2.0 + _offset.getZ() + (lat_z + 0.5) * _width_z) +
+      getOffset()->getZ();
 
   /* Create a new LocalCoords object for the next level Universe */
   LocalCoords* next_coords;
 
   if (coords->getNext() == NULL)
-    next_coords = new LocalCoords(nextX, nextY);
+    next_coords = new LocalCoords(next_x, next_y, next_z);
   else
     next_coords = coords->getNext();
 
-  Universe* univ = getUniverse(lat_x, lat_y);
+  Universe* univ = getUniverse(lat_x, lat_y, lat_z);
   next_coords->setUniverse(univ);
 
   /* Set Lattice indices */
   coords->setLattice(this);
   coords->setLatticeX(lat_x);
   coords->setLatticeY(lat_y);
+  coords->setLatticeZ(lat_z);
 
   coords->setNext(next_coords);
   next_coords->setPrev(coords);
@@ -1170,35 +1228,32 @@ Cell* Lattice::findCell(LocalCoords* coords) {
  */
 double Lattice::minSurfaceDist(Point* point, double angle) {
 
-  double next_x, next_y;
-  double dist_x, dist_y;
-  double dist_row, dist_col;
-
-  /* Compute the x and y indices for the Lattice cell this point is in */
+  /* Compute the x, y, and z indices for the Lattice cell this point is in */
   int lat_x = getLatX(point);
   int lat_y = getLatY(point);
+  
+  /* Create planes representing the boundaries of the lattice cell */
+  XPlane xplane(0.0);
+  YPlane yplane(0.0);
 
-  /* find distance to next x plane crossing */
-  if (angle < M_PI / 2.0)
-    next_x = (lat_x + 1) * _width_x - _width_x*_num_x/2.0 + _offset.getX();
+  /* Get the min distance for X PLANE  */
+  if (angle < M_PI_2)
+    xplane.setX(((lat_x+1) * _width_x - _width_x*_num_x/2.0 + _offset.getX()));
   else
-    next_x = lat_x * _width_x - _width_x*_num_x/2.0 + _offset.getX();
+    xplane.setX((lat_x * _width_x - _width_x*_num_x/2.0 + _offset.getX()));
+  
+  double dist_x = xplane.getMinDistance(point, angle);
 
-  /* get distance to the nearest cell in the current row */
-  next_y = point->getY() + tan(angle) * (next_x - point->getX());
-  dist_x = fabs(next_x - point->getX());
-  dist_y = fabs(next_y - point->getY());
-  dist_row = pow(pow(dist_x, 2) + pow(dist_y, 2), 0.5);
+  /* Get the min distance for Y PLANE */
+  if (angle < M_PI)
+    yplane.setY(((lat_y+1) * _width_y - _width_y*_num_y/2.0 + _offset.getY()));
+  else
+    yplane.setY((lat_y * _width_y - _width_y*_num_y/2.0 + _offset.getY()));
 
-  /* find distance to next y plane crossing */
-  next_y = (lat_y + 1) * _width_y - _width_y*_num_y/2.0 + _offset.getY();
-  next_x = point->getX() + (next_y - point->getY()) / tan(angle);
-  dist_x = fabs(next_x - point->getX());
-  dist_y = fabs(next_y - point->getY());
-  dist_col = pow(pow(dist_x, 2) + pow(dist_y, 2), 0.5);
+  double dist_y = yplane.getMinDistance(point, angle);
 
   /* return shortest distance to next lattice cell */
-  return std::min(dist_row, dist_col);
+  return std::min(dist_x, dist_y);
 }
 
 
@@ -1256,7 +1311,39 @@ int Lattice::getLatY(Point* point) {
 
   return lat_y;
 }
+
+
+/**
+ * @brief Finds the Lattice cell z index that a point lies in.
+ * @param point a pointer to a point being evaluated.
+ * @return the Lattice cell z index.
+ */
+int Lattice::getLatZ(Point* point) {
+
+  /* Check to see if lattice is infinite in z direction */
+  if (_width_z == std::numeric_limits<double>::infinity())
+    return 0;
   
+  /* Compute the z indice for the Lattice cell this point is in */
+  int lat_z = (int)floor((point->getZ() + _width_z*_num_z/2.0 -
+                          _offset.getZ()) / _width_z);
+
+  /* get the distance to the bottom surface */
+  double dist_to_bottom = point->getZ() + _width_z*_num_z/2.0 - _offset.getZ();
+
+  /* Check if the Point is on the Lattice boundaries and if so adjust
+   * z Lattice cell indice */
+  if (fabs(dist_to_bottom) < ON_SURFACE_THRESH) 
+    lat_z = 0;
+  else if (fabs(dist_to_bottom - _num_z*_width_z) < ON_SURFACE_THRESH) 
+    lat_z = _num_z - 1;
+  else if (lat_z < 0 || lat_z > _num_z-1)
+    log_printf(ERROR, "Trying to get lattice z index for point that is "
+               "outside lattice bounds: %f.", point->getZ());
+
+  return lat_z;
+}
+
 
 /**
  * @brief Converts a Lattice's attributes to a character array representation.
@@ -1270,15 +1357,19 @@ std::string Lattice::toString() {
          << ", name = " << _name
          << ", # cells along x = " << _num_x
          << ", # cells along y = " << _num_y
+         << ", # cells along z = " << _num_z
          << ", x width = " << _width_x
-         << ", y width = " << _width_y;
+         << ", y width = " << _width_y
+         << ", z width = " << _width_z;
 
   string << "\n\t\tUniverse IDs within this Lattice: ";
 
-  for (int i = _num_y-1; i > -1;  i--) {
-    for (int j = 0; j < _num_x; j++)
-      string << _universes.at(i).at(j).first << ", ";
-    string << "\n\t\t";
+  for (int k = _num_z-1; k > -1;  k--) {
+    for (int j = _num_y-1; j > -1;  j--) {
+      for (int i = 0; i < _num_x; i++)
+        string << _universes.at(k).at(j).at(i).first << ", ";
+      string << "\n\t\t";
+    }
   }
 
   return string.str();
@@ -1296,9 +1387,11 @@ void Lattice::printString() {
 
 /**
  * @brief Finds the Lattice cell index that a point lies in.
- * @details Lattice cells are numbered starting with 0 in the lower left
- *          corner. Lattice cell IDs in all rows then increase monotonically 
- *          from left to right. For example, the indices for a 4 x 4 lattice:
+ * @details Lattice cells are numbered starting with 0 x-min/y-min/z-min corner.
+ *          Lattice cell IDs then increase monotonically from x-min to x-max,
+ *          y-min to y-max, and z-min to z-max. Note that values increase first
+ *          on the x-axis, followed by the y-axis, then on the z-axis.
+ *          For example, the indices for a 4 x 4 x 1 lattice:
  *                  12  13  14  15
  *                  8    9  10  11
  *                  4    5   6   7
@@ -1306,64 +1399,142 @@ void Lattice::printString() {
  * @param point a pointer to a point being evaluated.
  * @return the Lattice cell index.
  */
-int Lattice::getLatticeCell(Point* point){
-  return (getLatY(point)*_num_x + getLatX(point));
+int Lattice::getLatticeCell(Point* point) {
+  return getLatZ(point)*_num_x*_num_y + getLatY(point)*_num_x + getLatX(point);
 }
 
 
 /**
+ * @brief Finds the distance from a point to a particular lattice cell surface.
+ * @param cell the cell index that the point is in.
+ * @param point a pointer to a point being evaluated.
+ * @param surface a surface id to get the distance to.
+ * @return the distance to the lattice cell surface of interest.
+ */
+double Lattice::getDistanceToSurface(int cell, Point* point, int surface) {
+
+  /* Get coordinates of the point */
+  double x = point->getX();
+  double y = point->getY();
+
+  /* Check that the surface is valid */
+  if (surface < 0 || surface >= NUM_SURFACES)
+    log_printf(ERROR, "Unable to get the distance from point (%f, %f) to "
+               "lattice surface %d since there are only %d surfaces",
+               x, y, surface, NUM_SURFACES);
+
+  /* Get lattice indices of the cell */
+  int lat_x = cell % _num_x;
+  int lat_y = cell / _num_x;
+
+  double dist;
+
+  /* Return the distance to the corresponding lattice cell surface */
+  if (surface == SURFACE_X_MIN) {
+    dist = lat_x*_width_x - _width_x*_num_x/2.0 + _offset.getX();
+    return fabs(x - dist);
+  }
+  else if (surface == SURFACE_X_MAX) {
+    dist = (lat_x + 1)*_width_x - _width_x*_num_x/2.0 + _offset.getX();
+    return fabs(x - dist);
+  }
+  else if (surface == SURFACE_Y_MIN) {
+    dist = lat_y*_width_y - _width_y*_num_y/2.0 + _offset.getY();
+    return fabs(y - dist);
+  }
+  else {
+    dist = (lat_y + 1)*_width_y - _width_y*_num_y/2.0 + _offset.getY();
+    return fabs(y - dist);
+  }
+}
+
+/**
  * @brief Finds the Lattice cell surface that a point lies on.
- *        If the point is not on a surface, -1 is returned.
- * @details The surface indices for a lattice cell are 0 (left),
- *         1, (bottom), 2 (right), 3 (top), 4 (bottom-left corner),
- *         5 (bottom-right corner), 6 (top-right corner), and 
- *         7 (top-left corner). The index returned takes into account
- *         the cell index and returns 8*cell_index + surface_index.
+ *        If the point is not on exactly one surface, -1 is returned.
+ * @details The surface indices are defined in the constants.h file and the
+ *         index returned takes into account the cell index and returns
+ *         NUM_SURFACES * cell_index + surface_index.
  * @param cell the cell index that the point is in.
  * @param point a pointer to a point being evaluated.
  * @return the Lattice surface index.
  */
 int Lattice::getLatticeSurface(int cell, Point* point) {
 
-  /* Get coordinates of point and cell boundaries */
-  double x = point->getX();
-  double y = point->getY();
-  int lat_x = cell % _num_x;
-  int lat_y = cell / _num_x;
-  double left = lat_x*_width_x - _width_x*_num_x/2.0 + _offset.getX();
-  double right = (lat_x + 1)*_width_x - _width_x*_num_x/2.0 + _offset.getX();
-  double bottom = lat_y*_width_y - _width_y*_num_y/2.0 + _offset.getY();
-  double top = (lat_y+1)*_width_y - _width_y*_num_y/2.0 + _offset.getY();
-  int surface = -1;
+  /* Initialize array of distances to each lattice cell surface */
+  double surface_distances[NUM_SURFACES];
 
-  /* Check if point is on left boundary */ 
-  if (fabs(x - left) <= ON_SURFACE_THRESH){
-    /* Check if point is on bottom boundary */ 
-    if (fabs(y - bottom) <= ON_SURFACE_THRESH)
-      surface = cell*8 + 4;
-    /* Check if point is on top boundary */ 
-    else if (fabs(y - top) <= ON_SURFACE_THRESH)
-      surface = cell*8 + 7;
-    else
-      surface = cell*8;
-  }
-  /* Check if point is on right boundary */ 
-  else if (fabs(x - right) <= ON_SURFACE_THRESH){
-    /* Check if point is on bottom boundary */ 
-    if (fabs(y - bottom) <= ON_SURFACE_THRESH)
-      surface = cell*8 + 5;
-    /* Check if point is on top boundary */ 
-    else if (fabs(y - top) <= ON_SURFACE_THRESH)
-      surface = cell*8 + 6;
-    else
-      surface = cell*8 + 2;
-  }
-  /* Check if point is on bottom boundary */ 
-  else if (fabs(y - bottom) <= ON_SURFACE_THRESH)
-    surface = cell*8 + 1;
-  /* Check if point is on top boundary */ 
-  else if (fabs(y - top) <= ON_SURFACE_THRESH)
-    surface = cell*8 + 3;
+  /* Get the distance to all the lattice cell surfaces */
+  for (int s=0; s < NUM_SURFACES; s++)
+    surface_distances[s] = getDistanceToSurface(cell, point, s);
 
-  return surface;
+  /* Loop over the surfaces of the lattice cell */
+  for (int s1=0; s1 < NUM_SURFACES; s1++) {
+
+    /* Check if point is on surface */
+    if (surface_distances[s1] <= ON_SURFACE_THRESH) {
+
+      /* If point is on surface, check if point is also on another surface.
+       * This would indicate a corner crossing, which is not considered a
+       * surface crossing, but rather a corner crossing. */
+      for (int s2=s1 + 1; s2 < NUM_SURFACES; s2++) {
+
+        /* If point touches two surfaces (i.e. a corner), return -1 */
+        if (surface_distances[s2] <= ON_SURFACE_THRESH)
+          return -1;
+      }
+
+      /* If corner was not encountered, return the surface id */
+      return cell*NUM_SURFACES + s1;
+    }
+  }
+
+  /* If no surface was encountered, return -1 */
+  return -1;
+}
+
+
+/**
+ * @brief Finds the Lattice cell corner that a point lies on.
+ *        If the point is on exactly one surface, -1 is returned.
+ * @details The surface and corner indices are defined in the constants.h file
+ *         and the index returned takes into account the cell index and returns
+ *         NUM_SURFACES * cell_index + corner_index.
+ * @param cell the cell index that the point is in.
+ * @param point a pointer to a point being evaluated.
+ * @return the Lattice corner index.
+ */
+int Lattice::getLatticeCorner(int cell, Point* point) {
+
+  /* Initialize array of distances to each lattice cell surface */
+  double surface_distances[NUM_SURFACES];
+  int corner;
+
+  /* Get the distance to all the lattice cell surfaces */
+  for (int s=0; s < NUM_SURFACES; s++)
+    surface_distances[s] = getDistanceToSurface(cell, point, s);
+
+  /* Loop over the surfaces of the lattice cell */
+  for (int s=0; s < NUM_SURFACES; s++) {
+
+    /* Check if point is on surface */
+    if (surface_distances[s] <= ON_SURFACE_THRESH) {
+
+      /* Check if point is on corner in clock-wise direction */
+      corner = s;
+      if (surface_distances[(s+1) % NUM_SURFACES] <= ON_SURFACE_THRESH)
+        return cell*NUM_SURFACES + corner;
+
+      /* Check if point is on corner in counter clock-wise direction */
+      corner = (s - 1 + NUM_SURFACES) % NUM_SURFACES;
+      if (surface_distances[(s - 1 + NUM_SURFACES) % NUM_SURFACES] <=
+          ON_SURFACE_THRESH)
+        return cell*NUM_SURFACES + corner;
+
+      /* If point is only on one surface, return -1 */
+      return -1;
+    }
+  }
+
+  /* If corner was encountered, return -1 */
+  return -1;
 }

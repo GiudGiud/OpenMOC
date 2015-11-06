@@ -166,13 +166,14 @@ void ExpEvaluator::initialize() {
 
   log_printf(INFO, "Initializing exponential interpolation table...");
 
-  /* Expand max tau slightly to avoid roundoff error approximation */
-  _max_optical_length *= 1.00001;
-
   /* Set size of interpolation table */
   int num_polar = _polar_quad->getNumPolarAngles();
   int num_array_values = _max_optical_length * sqrt(1. / (8. * _exp_precision));
   FP_PRECISION exp_table_spacing = _max_optical_length / num_array_values;
+
+  /* Increment the number of vaues in the array to ensure that a tau equal to
+   * max_optical_length resides as the final entry in the table */
+  num_array_values += 1;
 
   /* Compute the reciprocal of the table entry spacing */
   _inverse_exp_table_spacing = 1.0 / exp_table_spacing;
@@ -190,8 +191,8 @@ void ExpEvaluator::initialize() {
   FP_PRECISION sin_theta;
 
   /* Create exponential linear interpolation table */
-  for (int i=0; i < num_array_values; i++){
-    for (int p=0; p < num_polar; p++){
+  for (int i=0; i < num_array_values; i++) {
+    for (int p=0; p < num_polar; p++) {
       sin_theta = _polar_quad->getSinTheta(p);
       expon = exp(- (i * exp_table_spacing) / sin_theta);
       slope = - expon / sin_theta;
@@ -219,8 +220,8 @@ FP_PRECISION ExpEvaluator::computeExponential(FP_PRECISION tau, int polar) {
 
   /* Evaluate the exponential using the lookup table - linear interpolation */
   if (_interpolate) {
-    int index;
-    index = floor(tau * _inverse_exp_table_spacing);
+    tau = std::min(tau, (_max_optical_length));
+    int index = floor(tau * _inverse_exp_table_spacing);
     index *= _two_times_num_polar;
     exponential = (1. - (_exp_table[index + 2 * polar] * tau +
                   _exp_table[index + 2 * polar + 1]));

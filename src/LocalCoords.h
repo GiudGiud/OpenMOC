@@ -9,7 +9,9 @@
 #define LOCALCOORDS_H_
 
 #ifdef __cplusplus
+#ifdef SWIG
 #include "Python.h"
+#endif
 #include "Point.h"
 #include "Universe.h"
 #include "Cell.h"
@@ -61,7 +63,11 @@ private:
    *  resides */
   int _lattice_y;
 
-  /** A Point representing the 2D coordinates of this LocalCoords */
+  /** The third index of the Lattice cell within which this LocalCoords
+   *  resides */
+  int _lattice_z;
+  
+  /** A Point representing the 3D coordinates of this LocalCoords */
   Point _coords;
 
   /** A pointer to the LocalCoords at the next lower nested Universe level */
@@ -71,7 +77,7 @@ private:
   LocalCoords* _prev;
 
 public:
-  LocalCoords(double x, double y);
+  LocalCoords(double x, double y, double z);
   virtual ~LocalCoords();
   coordType getType();
   Universe* getUniverse() const;
@@ -79,8 +85,10 @@ public:
   Lattice* getLattice() const;
   int getLatticeX() const;
   int getLatticeY() const;
+  int getLatticeZ() const;
   double getX() const;
   double getY() const;
+  double getZ() const;
   Point* getPoint();
   LocalCoords* getNext() const;
   LocalCoords* getPrev() const;
@@ -91,8 +99,10 @@ public:
   void setLattice(Lattice* lattice);
   void setLatticeX(int lattice_x);
   void setLatticeY(int lattice_y);
+  void setLatticeZ(int lattice_z);
   void setX(double x);
   void setY(double y);
+  void setZ(double z);
   void setNext(LocalCoords *next);
   void setPrev(LocalCoords* coords);
 

@@ -7,30 +7,10 @@
 # @author William Boyd (wboyd@mit.edu)
 # @date March 10, 2013
 
+import os
 import sys
-
-## @var openmoc
-#  @brief The openmoc module in use in the Python script using the
-#         openmoc.plotter module.
-openmoc = ''
-
-# Determine which OpenMOC module is being used
-if 'openmoc.gnu.double' in sys.modules:
-  openmoc = sys.modules['openmoc.gnu.double']
-elif 'openmoc.gnu.single' in sys.modules:
-  openmoc = sys.modules['openmoc.gnu.single']
-elif 'openmoc.intel.double' in sys.modules:
-  openmoc = sys.modules['openmoc.intel.double']
-elif 'openmoc.intel.single' in sys.modules:
-  openmoc = sys.modules['openmoc.intel.single']
-elif 'openmoc.bgq.double' in sys.modules:
-  openmoc = sys.modules['openmoc.bgq.double']
-elif 'openmoc.bgq.single' in sys.modules:
-  openmoc = sys.modules['openmoc.bgq.single']
-else:
-  import openmoc
-
-
+import numpy as np
+import numpy.random
 import matplotlib
 
 # force headless backend, or set 'backend' to 'Agg'
@@ -38,16 +18,10 @@ import matplotlib
 matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
-
-# Force non-interactive mode, or set 'interactive' to False
-# in your ~/.matplotlib/matplotlibrc
-plt.ioff()
-
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
-import numpy as np
-import numpy.random
-import os, sys
+
+import openmoc
 
 # For Python 2.X.X
 if (sys.version_info[0] == 2):
@@ -58,6 +32,9 @@ else:
   from openmoc.log import *
   from openmoc.process import *
 
+# Force non-interactive mode, or set 'interactive' to False
+# in your ~/.matplotlib/matplotlibrc
+plt.ioff()
 
 ## A static variable for the output directory in which to save plots
 subdirectory = "/plots/"
@@ -98,15 +75,16 @@ def plot_tracks(track_generator):
   py_printf('NORMAL', 'Plotting the tracks...')
 
   # Retrieve data from TrackGenerator
+  vals_per_track = openmoc.NUM_VALUES_PER_RETRIEVED_TRACK
   num_azim = track_generator.getNumAzim()
   spacing = track_generator.getTrackSpacing()
   num_tracks = track_generator.getNumTracks()
-  coords = track_generator.retrieveTrackCoords(num_tracks*4)
+  coords = track_generator.retrieveTrackCoords(num_tracks*vals_per_track)
 
   # Convert data to NumPy arrays
   coords = np.array(coords)
-  x = coords[0::2]
-  y = coords[1::2]
+  x = coords[0::vals_per_track/2]
+  y = coords[1::vals_per_track/2]
 
   # Make figure of line segments for each Track
   fig = plt.figure()
@@ -162,24 +140,28 @@ def plot_segments(track_generator):
   py_printf('NORMAL', 'Plotting the track segments...')
 
   # Retrieve data from TrackGenerator
+  vals_per_segment = openmoc.NUM_VALUES_PER_RETRIEVED_SEGMENT
   num_azim = track_generator.getNumAzim()
   spacing = track_generator.getTrackSpacing()
   num_segments = track_generator.getNumSegments()
   num_fsrs = track_generator.getGeometry().getNumFSRs()
-  coords = track_generator.retrieveSegmentCoords(num_segments*5)
+  coords = track_generator.retrieveSegmentCoords(num_segments*vals_per_segment)
 
   # Convert data to NumPy arrays
   coords = np.array(coords)
   x = numpy.zeros(num_segments*2)
   y = numpy.zeros(num_segments*2)
+  z = numpy.zeros(num_segments*2)
   fsrs = numpy.zeros(num_segments)
 
   for i in range(num_segments):
-    fsrs[i] = coords[i*5]
-    x[i*2] = coords[i*5+1]
-    y[i*2] = coords[i*5+2]
-    x[i*2+1] = coords[i*5+3]
-    y[i*2+1] = coords[i*5+4]
+    fsrs[i] = coords[i*vals_per_segment]
+    x[i*2] = coords[i*vals_per_segment+1]
+    y[i*2] = coords[i*vals_per_segment+2]
+    z[i*2] = coords[i*vals_per_segment+3]
+    x[i*2+1] = coords[i*vals_per_segment+4]
+    y[i*2+1] = coords[i*vals_per_segment+5]
+    z[i*2+1] = coords[i*vals_per_segment+6]
 
   # Create array of equally spaced randomized floats as a color map for plots
   # Seed the NumPy random number generator to ensure reproducible color maps
@@ -202,13 +184,15 @@ def plot_segments(track_generator):
   plt.xlim([x.min(), x.max()])
   plt.ylim([y.min(), y.max()])
 
-  title = 'Segments for ' + str(num_azim) + ' angles and ' + str(spacing) + \
+  suptitle = 'Segments for ' + str(num_azim) + ' angles, and ' + str(spacing) + \
         ' cm spacing'
+  title = 'z = ' + str(z[0])
 
+  plt.suptitle(suptitle)
   plt.title(title)
 
   filename = directory + 'segments-' + str(num_azim) + '-angles-' + \
-      str(spacing) + '-spacing.png'
+      str(spacing) + '-spacing-z-' + str(z[0]) + '.png'
 
   fig.savefig(filename, bbox_inches='tight')
   plt.close(fig)
@@ -231,7 +215,8 @@ def plot_segments(track_generator):
 # @param gridsize an optional number of grid cells for the plot
 # @param xlim optional list/tuple of the minimim/maximum x-coordinates
 # @param ylim optional list/tuple of the minimim/maximum y-coordinates
-def plot_materials(geometry, gridsize=250, xlim=None, ylim=None):
+# @param zcoord optional the z coordinate (default is 0.0)
+def plot_materials(geometry, gridsize=250, xlim=None, ylim=None, zcoord=None):
 
   global subdirectory
 
@@ -244,16 +229,23 @@ def plot_materials(geometry, gridsize=250, xlim=None, ylim=None):
   # Error checking
   if not 'Geometry' in str(type(geometry)):
     py_printf('ERROR', 'Unable to plot the Materials since ' + \
-                    'input was not a geometry class object')
+              'input was not a geometry class object')
 
   if not is_integer(gridsize):
     py_printf('ERROR', 'Unable to plot the Materials since ' + \
-              'since the gridsize %d is not an integer', gridsize)
+              'the gridsize %d is not an integer', gridsize)
 
   if gridsize <= 0:
     py_printf('ERROR', 'Unable to plot the Materials ' + \
               'with a negative gridsize (%d)', gridsize)
+    
+  # If zcoord was not set, set the zcoord to 0.0
+  if zcoord is None:
+    zcoord = 0.0
 
+  # Check z-coord
+  check_zcoord(geometry, zcoord)
+    
   py_printf('NORMAL', 'Plotting the materials...')
 
   # Initialize a NumPy array for the surface colors
@@ -269,7 +261,7 @@ def plot_materials(geometry, gridsize=250, xlim=None, ylim=None):
       x = coords['x'][i]
       y = coords['y'][j]
 
-      point = openmoc.LocalCoords(x, y)
+      point = openmoc.LocalCoords(x, y, zcoord)
       point.setUniverse(geometry.getRootUniverse())
       cell = geometry.findCellContainingCoords(point)
 
@@ -305,8 +297,9 @@ def plot_materials(geometry, gridsize=250, xlim=None, ylim=None):
   colors = np.flipud(colors)
   plt.imshow(colors, extent=coords['bounds'],
              interpolation='nearest', cmap=cmap, vmin=0, vmax=num_materials)
-  plt.title('Materials')
-  filename = directory + 'materials.png'
+  plt.suptitle('Materials')
+  plt.title('z = ' + str(zcoord))
+  filename = directory + 'materials-z-' + str(zcoord) + '.png'
   fig.savefig(filename, bbox_inches='tight')
   plt.close(fig)
 
@@ -327,7 +320,8 @@ def plot_materials(geometry, gridsize=250, xlim=None, ylim=None):
 # @param gridsize an optional number of grid cells for the plot
 # @param xlim optional list/tuple of the minimim/maximum x-coordinates
 # @param ylim optional list/tuple of the minimim/maximum y-coordinates
-def plot_cells(geometry, gridsize=250, xlim=None, ylim=None):
+# @param zcoord optional the z coordinate (default is 0.0)
+def plot_cells(geometry, gridsize=250, xlim=None, ylim=None, zcoord=None):
 
   global subdirectory
 
@@ -344,11 +338,17 @@ def plot_cells(geometry, gridsize=250, xlim=None, ylim=None):
 
   if not is_integer(gridsize):
     py_printf('ERROR', 'Unable to plot the Cells since ' + \
-                'since the gridsize %d is not an integer', gridsize)
+              'the gridsize %d is not an integer', gridsize)
 
   if gridsize <= 0:
     py_printf('ERROR', 'Unable to plot the Cells ' + \
               'with a negative gridsize (%d)', gridsize)
+
+  if zcoord is None:
+    zcoord = 0.0
+
+  # Check z-coord
+  check_zcoord(geometry, zcoord)
 
   py_printf('NORMAL', 'Plotting the cells...')
 
@@ -365,7 +365,7 @@ def plot_cells(geometry, gridsize=250, xlim=None, ylim=None):
       x = coords['x'][i]
       y = coords['y'][j]
 
-      point = openmoc.LocalCoords(x, y)
+      point = openmoc.LocalCoords(x, y, zcoord)
       point.setUniverse(geometry.getRootUniverse())
       cell = geometry.findCellContainingCoords(point)
 
@@ -401,8 +401,9 @@ def plot_cells(geometry, gridsize=250, xlim=None, ylim=None):
   colors = np.flipud(colors)
   plt.imshow(colors, extent=coords['bounds'],
              interpolation='nearest', cmap=cmap, vmin=0, vmax=num_cells)
-  plt.title('Cells')
-  filename = directory + 'cells.png'
+  plt.suptitle('Cells')
+  plt.title('z = ' + str(zcoord))
+  filename = directory + 'cells-z-' + str(zcoord) + '.png'
 
   fig.savefig(filename, bbox_inches='tight')
   plt.close(fig)
@@ -412,6 +413,8 @@ def plot_cells(geometry, gridsize=250, xlim=None, ylim=None):
 ##
 # @brief This method takes in a Geometry object and plots a color-coded 2D
 #        surface plot representing the flat source regions in the Geometry.
+#        The FSR centroids are plotted as black circles on top of the FSRs if
+#        the centroids boolean is set to True.
 # @details The Geometry object must be initialized with Materials, Cells,
 #          Universes and Lattices before being passed into this method. A user
 #          may invoke this function from an OpenMOC Python file as follows:
@@ -425,7 +428,11 @@ def plot_cells(geometry, gridsize=250, xlim=None, ylim=None):
 # @param gridsize an optional number of grid cells for the plot
 # @param xlim optional list/tuple of the minimim/maximum x-coordinates
 # @param ylim optional list/tuple of the minimim/maximum y-coordinates
-def plot_flat_source_regions(geometry, gridsize=250, xlim=None, ylim=None):
+# @param centroids optional boolean to plot the FSR centroids
+# @param marker_type optional string to set the centroids marker type
+# @param marker_size optional int/float to set the centroids marker size
+def plot_flat_source_regions(geometry, gridsize=250, xlim=None, ylim=None, \
+                             centroids=False, marker_type='o', marker_size=2):
 
   global subdirectory
 
@@ -442,11 +449,31 @@ def plot_flat_source_regions(geometry, gridsize=250, xlim=None, ylim=None):
 
   if not is_integer(gridsize):
     py_printf('ERROR', 'Unable to plot the flat source regions since ' + \
-              'since the gridsize %d is not an integer', gridsize)
+              'the gridsize %d is not an integer', gridsize)
 
   if gridsize <= 0:
     py_printf('ERROR', 'Unable to plot the flat source regions ' + \
               'with a negative gridsize (%d)', gridsize)
+
+  if not isinstance(centroids, bool):
+    py_printf('ERROR', 'Unable to plot the flat source regions since ' + \
+              'centroids is not a boolean')
+
+  if not isinstance(marker_type, str):
+    py_printf('ERROR', 'Unable to plot the flat source regions since ' + \
+              'marker_type is a string')
+
+  if marker_type not in matplotlib.markers.MarkerStyle().markers.keys():
+    py_printf('ERROR', 'Unable to plot the flat source regions since ' + \
+              'marker_type is not a valid marker (%d)', marker_type)
+
+  if not is_float(marker_size) and not is_integer(marker_size):
+    py_printf('ERROR', 'Unable to plot the flat source regions since ' + \
+              'marker_size is not an int or float', marker_size)
+
+  if marker_size <= 0:
+    py_printf('ERROR', 'Unable to plot the flat source regions ' + \
+              'with a negative marker_size (%d)', marker_size)
 
   py_printf('NORMAL', 'Plotting the flat source regions...')
 
@@ -463,6 +490,9 @@ def plot_flat_source_regions(geometry, gridsize=250, xlim=None, ylim=None):
   # Retrieve the pixel coordinates
   coords = get_pixel_coords(geometry, gridsize, xlim, ylim)
 
+  # Get the Geometry's z-coord
+  zcoord = geometry.getFSRPoint(0).getZ()
+
   # Find the flat source region IDs for each grid point
   for i in range(gridsize):
     for j in range(gridsize):
@@ -470,7 +500,7 @@ def plot_flat_source_regions(geometry, gridsize=250, xlim=None, ylim=None):
       x = coords['x'][i]
       y = coords['y'][j]
 
-      local_coords = openmoc.LocalCoords(x, y)
+      local_coords = openmoc.LocalCoords(x, y, zcoord)
       local_coords.setUniverse(geometry.getRootUniverse())
       geometry.findCellContainingCoords(local_coords)
       fsr_id = geometry.getFSRId(local_coords)
@@ -508,8 +538,28 @@ def plot_flat_source_regions(geometry, gridsize=250, xlim=None, ylim=None):
   colors = np.flipud(colors)
   plt.imshow(colors, extent=coords['bounds'],
              interpolation='nearest', cmap=cmap, vmin=0, vmax=num_fsrs)
-  plt.title('Flat Source Regions')
-  filename = directory + 'flat-source-regions.png'
+
+  # Plot centroids on top of 2D FSR color map
+  if centroids:
+    centroids_x = []
+    centroids_y = []
+    for r in range(geometry.getNumFSRs()):
+      point = geometry.getFSRCentroid(r)
+      centroids_x.append(point.getX())
+      centroids_y.append(point.getY())
+
+    plt.scatter(centroids_x, centroids_y, color='k', marker=marker_type, \
+                s=marker_size)
+
+    # Matplotlib likes to add a buffer around scatter plots, so we will
+    # manually set the plot bounds
+    plt.xlim(min(coords['x']), max(coords['x']))
+    plt.ylim(min(coords['y']), max(coords['y']))
+
+  # Set the plot title and save the figure
+  plt.suptitle('Flat Source Regions')
+  plt.title('z = ' + str(zcoord))
+  filename = directory + 'flat-source-regions-z-' + str(zcoord) + '.png'
   fig.savefig(filename, bbox_inches='tight')
   plt.close(fig)
 
@@ -558,7 +608,7 @@ def plot_cmfd_cells(geometry, cmfd, gridsize=250, xlim=None, ylim=None):
 
   if not is_integer(gridsize):
     py_printf('ERROR', 'Unable to plot the CMFD cells since ' + \
-              'since the gridsize %s is not an integer', str(gridsize))
+              'the gridsize %s is not an integer', str(gridsize))
 
   if gridsize <= 0:
     py_printf('ERROR', 'Unable to plot the CMFD cells ' + \
@@ -572,6 +622,9 @@ def plot_cmfd_cells(geometry, cmfd, gridsize=250, xlim=None, ylim=None):
   # Retrieve the pixel coordinates
   coords = get_pixel_coords(geometry, gridsize, xlim, ylim)
 
+  # Get the Geometry's z-coord
+  zcoord = geometry.getFSRPoint(0).getZ()
+
   # Find the CMFD cell ID for each grid point
   for i in range(gridsize):
     for j in range(gridsize):
@@ -579,7 +632,7 @@ def plot_cmfd_cells(geometry, cmfd, gridsize=250, xlim=None, ylim=None):
       x = coords['x'][i]
       y = coords['y'][j]
 
-      local_coords = openmoc.LocalCoords(x, y)
+      local_coords = openmoc.LocalCoords(x, y, zcoord)
       local_coords.setUniverse(geometry.getRootUniverse())
       geometry.findCellContainingCoords(local_coords)
       fsr_id = geometry.getFSRId(local_coords)
@@ -694,6 +747,9 @@ def plot_spatial_fluxes(solver, energy_groups=[1],
   # Retrieve the pixel coordinates
   coords = get_pixel_coords(geometry, gridsize, xlim, ylim)
 
+  # Get the Geometry's z-coord
+  zcoord = geometry.getFSRPoint(0).getZ()
+
   for i in range(gridsize):
     for j in range(gridsize):
 
@@ -701,7 +757,7 @@ def plot_spatial_fluxes(solver, energy_groups=[1],
       x = coords['x'][i]
       y = coords['y'][j]
 
-      point = openmoc.LocalCoords(x, y)
+      point = openmoc.LocalCoords(x, y, zcoord)
       point.setUniverse(geometry.getRootUniverse())
       geometry.findCellContainingCoords(point)
       fsr_id = geometry.getFSRId(point)
@@ -713,7 +769,7 @@ def plot_spatial_fluxes(solver, energy_groups=[1],
       # Get the scalar flux for each energy group in this FSR
       else:
         for index, group in enumerate(energy_groups):
-          fluxes[index,j,i] = solver.getFSRScalarFlux(fsr_id, group)
+          fluxes[index,j,i] = solver.getFlux(fsr_id, group)
 
   # Loop over all energy group and create a plot
   for index, group in enumerate(energy_groups):
@@ -722,8 +778,10 @@ def plot_spatial_fluxes(solver, energy_groups=[1],
     fig = plt.figure()
     plt.imshow(np.flipud(fluxes[index,:,:]), extent=coords['bounds'])
     plt.colorbar()
-    plt.title('FSR Scalar Flux (Group {0})'.format(group))
-    filename = directory + 'fsr-flux-group-' + str(group) + '.png'
+    plt.suptitle('FSR Scalar Flux (Group {0})'.format(group))
+    plt.title('z = ' + str(zcoord))
+    filename = directory + 'fsr-flux-group-' + str(group) + '-z-' + \
+               str(zcoord) + '.png'
     fig.savefig(filename, bbox_inches='tight')
     plt.close(fig)
 
@@ -832,7 +890,7 @@ def plot_energy_fluxes(solver, fsrs, group_bounds=None, norm=True, loglog=True):
 
     # Extract the flux in each energy group
     for group in range(num_groups):
-        fluxes[group] = solver.getFSRScalarFlux(fsr, group+1)
+        fluxes[group] = solver.getFlux(fsr, group+1)
 
     # Normalize fluxes to the total integrated flux
     if norm:
@@ -875,11 +933,8 @@ def plot_energy_fluxes(solver, fsrs, group_bounds=None, norm=True, loglog=True):
 # @brief This method plots a color-coded 2D surface plot representing the 
 #        FSR fission rates in the Geometry.
 # @details The Solver must have converged the flat source sources prior to
-#          calling this routine. The routine will generate a step plot of the
-#          flat flux across each energy group. 
-#
-#          A user may invoke this function from an OpenMOC Python file 
-#          as follows:
+#          calling this routine. A user may invoke this function from an 
+#          OpenMOC Python file as follows:
 #
 # @code
 #         openmoc.plotter.plot_fission_rates(solver)
@@ -905,7 +960,7 @@ def plot_fission_rates(solver, gridsize=250, xlim=None, ylim=None):
 
   if not is_integer(gridsize):
     py_printf('ERROR', 'Unable to plot the fission rates ' + \
-              'since since the gridsize %s is not an integer', str(gridsize))
+              'since the gridsize %s is not an integer', str(gridsize))
 
   if gridsize <= 0:
     py_printf('ERROR', 'Unable to plot the fission rates ' + \
@@ -925,6 +980,9 @@ def plot_fission_rates(solver, gridsize=250, xlim=None, ylim=None):
   # Retrieve the pixel coordinates
   coords = get_pixel_coords(geometry, gridsize, xlim, ylim)
 
+  # Get the Geometry's z-coord
+  zcoord = geometry.getFSRPoint(0).getZ()
+
   for i in range(gridsize):
     for j in range(gridsize):
 
@@ -932,7 +990,7 @@ def plot_fission_rates(solver, gridsize=250, xlim=None, ylim=None):
       x = coords['y'][i]
       y = coords['x'][j]
 
-      point = openmoc.LocalCoords(x, y)
+      point = openmoc.LocalCoords(x, y, zcoord)
       point.setUniverse(geometry.getRootUniverse())
       geometry.findCellContainingCoords(point)
       fsr_id = geometry.getFSRId(point)
@@ -948,9 +1006,99 @@ def plot_fission_rates(solver, gridsize=250, xlim=None, ylim=None):
   fig = plt.figure()
   plt.imshow(np.flipud(surface), extent=coords['bounds'])
   plt.colorbar()
-  plt.title('Flat Source Region Fission Rates')
-  filename = directory + 'fission-rates.png'
+  plt.suptitle('Flat Source Region Fission Rates')
+  plt.title('z = ' + str(zcoord))
+  filename = directory + 'fission-rates-z-' + str(zcoord) + '.png'
   fig.savefig(filename, bbox_inches='tight')
+
+
+##
+# @brief This method plots a color-coded 2D surface plot representing the 
+#        FSR scalar fluxes for various eigenmodes from an IRAMSolver.
+# @details The IRAMSolver must have computed the eigenmodes prior to
+#          calling this routine. A user may invoke this function from 
+#          an OpenMOC Python file as follows:
+#
+# @code
+#         openmoc.plotter.plot_eigenmode_fluxes(iramsolver, energy_groups=[1,7])
+# @endcode
+#
+# @param iramsolver an IRAMSolver object that has computed the eigenmodes
+# @param eigenmodes a Python list of integer eigenmodes to plot
+# @param energy_groups a Python list of integer energy groups to plot
+# @param gridsize an optional number of grid cells for the plot
+# @param xlim optional list/tuple of the minimim/maximum x-coordinates
+# @param ylim optional list/tuple of the minimim/maximum y-coordinates
+def plot_eigenmode_fluxes(iramsolver, eigenmodes=[], energy_groups=[1], 
+                          gridsize=250, xlim=None, ylim=None):
+
+  global subdirectory
+
+  directory = openmoc.get_output_directory() + subdirectory
+
+  # Make directory if it does not exist
+  if not os.path.exists(directory):
+    os.makedirs(directory)
+
+  if not 'IRAMSolver' in str(type(iramsolver)):
+    py_printf('ERROR', 'Unable to plot the eigenmode fluxes ' + \
+              'since input did not contain an IRAMSolver class object')
+
+  if isinstance(eigenmodes, (list, tuple, np.ndarray)):
+
+    # If eigenmodes parameters is empty list, plot all eigenmodes
+    if len(eigenmodes) == 0:
+      eigenmodes = np.arange(1, iramsolver._num_modes+1)
+
+    for mode in eigenmodes:
+      if not is_integer(mode):
+        py_printf('ERROR', 'Unable to plot the eigenmode flux since the ' + \
+                  'eigenmodes contains %s which is not a number', str(mode))
+
+      elif mode <= 0:
+        py_printf('ERROR', 'Unable to plot the eigenmode flux since the ' + \
+                  'eigenmodes contains %d which is negative', mode)
+
+      elif mode > iramsolver._num_modes:
+        py_printf('ERROR', 'Unable to plot the eigenmode flux since the ' + \
+                  'eigenmodes contains %d but the IRAMSolver only ' + \
+                  'computed %d modes', mode)
+
+  else:
+    py_printf('ERROR', 'Unable to plot the eigenmode flux since the ' + \
+              'eigenmodes is not a Python tuple/list or NumPy array')
+
+  py_printf('NORMAL', 'Plotting the eigenmode fluxes...')
+
+  # Extract the MOC Solver from the IRAMSolver
+  moc_solver = iramsolver._moc_solver
+
+  # Loop over each eigenmode
+  for mode in eigenmodes:
+  
+    # Extract the eigenvector for this eigenmode from the IRAMSolver
+    eigenvec = iramsolver._eigenvectors[:,mode-1]
+
+    # Convert it into a form that SWIG will be happy with
+    eigenvec = np.squeeze(np.ascontiguousarray(eigenvec))
+    eigenvec = np.real(eigenvec).astype(iramsolver._precision)
+
+    # Ensure the primary eigenvector is positive
+    if(mode-1 == 0):
+      eigenvec = np.abs(eigenvec)
+        
+    # Insert eigenvector into MOC Solver object
+    moc_solver.setFluxes(eigenvec)
+
+    # Set subdirectory folder for this eigenmode
+    num_digits = len(str(max(eigenmodes)))
+    subdirectory = '/plots/eig-{0}-flux/'.format(str(mode).zfill(num_digits))
+
+    # Plot this eigenmode's spatial fluxes 
+    plot_spatial_fluxes(moc_solver, energy_groups, gridsize, xlim, ylim)
+
+  # Reset global subdirectory
+  subdirectory = '/plots/'
 
 
 ##
@@ -991,3 +1139,21 @@ def get_pixel_coords(geometry, gridsize, xlim, ylim):
   coords['bounds'] = bounds
 
   return coords
+
+
+##
+# @brief This is a helper method to check that z-coord falls within the bounds
+#        of the geometry.
+# @param geometry a Geometry object which has been initialized with Materials,
+#        Cells, Universes and Lattices
+# @param zcoord the z coordinate
+def check_zcoord(geometry, zcoord):
+
+  if not is_float(zcoord):
+    py_printf('ERROR', 'Unable to produce plot since ' + \
+              'the z-coord %d is not a float', zcoord)
+
+  elif zcoord < geometry.getMinZ() or zcoord > geometry.getMaxZ():
+    py_printf('ERROR', 'Unable to produce plot since ' + \
+              'the z-coord %d is outside the geometry z-bounds (%d, %d)', \
+              geometry.getMinZ(), geometry.getMaxZ())

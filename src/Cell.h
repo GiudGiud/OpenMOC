@@ -10,7 +10,9 @@
 #define CELL_H_
 
 #ifdef __cplusplus
+#ifdef SWIG
 #include "Python.h"
+#endif
 #include "Material.h"
 #include "Surface.h"
 #include "Point.h"
@@ -52,7 +54,10 @@ enum cellType {
   MATERIAL,
 
   /** A cell filled by a Universe */
-  FILL
+  FILL,
+
+  /** A cell not yet filled by anything */
+  UNFILLED
 };
 
 
@@ -89,7 +94,7 @@ private:
   int _num_sectors;
 
   /** Map of bounding Surface IDs with pointers and halfspaces (+/-1) */
-  std::map<int, surface_halfspace> _surfaces;
+  std::map<int, surface_halfspace*> _surfaces;
 
   /** The minimum reachable x-coordinate within the Cell */
   double _min_x;
@@ -121,12 +126,6 @@ private:
   /** The boundary condition at the maximum reachable y-coordinate */
   boundaryType _max_y_bc;
 
-  /** The boundary condition at the minimum reachable z-coordinate */
-  boundaryType _min_z_bc;
-
-  /** The boundary condition at the maximum reachable z-coordinate */
-  boundaryType _max_z_bc;
-
   /* Vector of neighboring Cells */
   std::vector<Cell*> _neighbors;
 
@@ -154,10 +153,8 @@ public:
   boundaryType getMaxXBoundaryType();
   boundaryType getMinYBoundaryType();
   boundaryType getMaxYBoundaryType();
-  boundaryType getMinZBoundaryType();
-  boundaryType getMaxZBoundaryType();
   int getNumSurfaces() const;
-  std::map<int, surface_halfspace> getSurfaces() const;
+  std::map<int, surface_halfspace*> getSurfaces() const;
   std::vector<Cell*> getNeighbors() const;
 
   std::map<int, Cell*> getAllCells();

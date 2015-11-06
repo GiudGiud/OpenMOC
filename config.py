@@ -71,10 +71,6 @@ class configuration:
   # Build the openmoc.cuda module
   with_cuda = False
 
-  # Compile with NumPy typemaps and the C API to allow users to pass NumPy
-  # arrays to/from the C++ source code
-  with_numpy = True
-
   # The vector length used for the VectorizedSolver class. This will used
   # as a hint for the Intel compiler to issue SIMD (ie, SSE, AVX, etc) vector
   # instructions. This is accomplished by adding "dummy" energy groups such
@@ -92,7 +88,7 @@ class configuration:
   extensions = list()
 
   # List of the possible packages to install based on runtime options
-  packages = ['openmoc', 'openmoc.cuda']
+  packages = ['openmoc', 'openmoc.cuda', 'openmoc.compatible']
 
 
   #############################################################################
@@ -118,25 +114,32 @@ class configuration:
                     'src/Track.cpp',
                     'src/TrackGenerator.cpp',
                     'src/Universe.cpp',
-                    'src/Cmfd.cpp']
+                    'src/Vector.cpp',
+                    'src/Matrix.cpp',
+                    'src/Cmfd.cpp',
+                    'src/linalg.cpp']
 
   sources['clang'] = ['openmoc/openmoc_wrap.cpp',
-                    'src/Cell.cpp',
-                    'src/Geometry.cpp',
-                    'src/LocalCoords.cpp',
-                    'src/log.cpp',
-                    'src/Material.cpp',
-                    'src/Point.cpp',
-                    'src/PolarQuad.cpp',
-                    'src/ExpEvaluator.cpp',
-                    'src/Solver.cpp',
-                    'src/CPUSolver.cpp',
-                    'src/Surface.cpp',
-                    'src/Timer.cpp',
-                    'src/Track.cpp',
-                    'src/TrackGenerator.cpp',
-                    'src/Universe.cpp',
-                    'src/Cmfd.cpp']
+                      'src/Cell.cpp',
+                      'src/Geometry.cpp',
+                      'src/LocalCoords.cpp',
+                      'src/log.cpp',
+                      'src/Material.cpp',
+                      'src/Point.cpp',
+                      'src/PolarQuad.cpp',
+                      'src/ExpEvaluator.cpp',
+                      'src/Solver.cpp',
+                      'src/CPUSolver.cpp',
+                      'src/Surface.cpp',
+                      'src/Timer.cpp',
+                      'src/Track.cpp',
+                      'src/TrackGenerator.cpp',
+                      'src/Universe.cpp',
+                      'src/Cmfd.cpp',
+                      'src/Vector.cpp',
+                      'src/Matrix.cpp',
+                      'src/linalg.cpp']
+
 
   sources['icpc'] = ['openmoc/openmoc_wrap.cpp',
                      'src/Cell.cpp',
@@ -155,7 +158,11 @@ class configuration:
                      'src/Track.cpp',
                      'src/TrackGenerator.cpp',
                      'src/Universe.cpp',
-                     'src/Cmfd.cpp']
+                     'src/Cmfd.cpp',
+                     'src/Vector.cpp',
+                     'src/Matrix.cpp',
+                     'src/linalg.cpp']
+
 
   sources['bgxlc'] = ['openmoc/openmoc_wrap.cpp',
                       'src/Cell.cpp',
@@ -173,7 +180,11 @@ class configuration:
                       'src/Track.cpp',
                       'src/TrackGenerator.cpp',
                       'src/Universe.cpp',
-                      'src/Cmfd.cpp']
+                      'src/Cmfd.cpp',
+                      'src/Vector.cpp',
+                      'src/Matrix.cpp',
+                      'src/linalg.cpp']
+
 
   sources['nvcc'] = ['openmoc/cuda/openmoc_cuda_wrap.cpp',
                      'src/accel/cuda/GPUExpEvaluator.cu',
@@ -206,8 +217,7 @@ class configuration:
   compiler_flags['nvcc'] =  ['--relocatable-device-code', 'true',
                              '-c', '-O3',  '-std=c++11', 
                              '--compiler-options', '-fpic',
-                             '-gencode=arch=compute_20,code=sm_20',
-                             '-gencode=arch=compute_30,code=sm_30']
+                             '-arch=compute_20']
 
 
   #############################################################################
@@ -374,6 +384,11 @@ class configuration:
                               ('NVCC', None),
                               ('CCACHE_CC', 'nvcc')]
 
+  # define OPENMP and SWIG (for log output)
+  for compiler in macros:
+    for precision in macros[compiler]:
+      macros[compiler][precision].append(('OPENMP', None))
+      macros[compiler][precision].append(('SWIG', None))
 
 
   def setup_extension_modules(self):
@@ -396,27 +411,24 @@ class configuration:
         self.compiler_flags[k].append('-pg')
         self.compiler_flags[k].append('-g')
 
-    # If the user passed in the --no-numpy flag, tell SWIG not to embed
-    # NumPy typemaps in the source code
-    if not self.with_numpy:
-      self.swig_flags.append('-DNO_NUMPY')
+    # Obtain the NumPy include directory
+    try:
+      numpy_include = numpy.get_include()
+    except AttributeError:
+      numpy_include = numpy.get_numpy_include()
 
-    # Otherwise, obtain the NumPy include directory
-    else:
-      try:
-        numpy_include = numpy.get_include()
-
-      except AttributeError:
-        numpy_include = numpy.get_numpy_include()
-
-      # Add the NumPy include directory to the include directories
-      # list for each type of compiler
-      for cc in self.include_directories.keys():
-        self.include_directories[cc].append(numpy_include)
+    # Add the NumPy include directory to the include directories
+    # list for each type of compiler
+    for cc in self.include_directories.keys():
+      self.include_directories[cc].append(numpy_include)
 
 
     # The main openmoc extension (defaults are gcc and single precision)
     self.swig_flags += ['-D' + self.fp.upper()]
+    if self.fp == 'double':
+      self.swig_flags += ['-DFP_PRECISION=double']
+    else:
+      self.swig_flags += ['-DFP_PRECISION=float']
 
     self.extensions.append(
       Extension(name = '_openmoc',

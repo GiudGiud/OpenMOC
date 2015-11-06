@@ -9,7 +9,9 @@
 #define GEOMETRY_H_
 
 #ifdef __cplusplus
+#ifdef SWIG
 #include "Python.h"
+#endif
 #include "Cmfd.h"
 #include <limits>
 #include <sys/types.h>
@@ -18,9 +20,11 @@
 #include <string>
 #include <omp.h>
 #include <functional>
-#include <unordered_map>
+#include "ParallelHashMap.h"
 #endif
 
+/** Forward declaration of Cmfd class */
+class Cmfd;
 
 /**
  * @struct fsr_data
@@ -33,10 +37,27 @@ struct fsr_data {
 
   /** The FSR ID */
   int _fsr_id;
+ 
+  /** The CMFD Cell */
+  int _cmfd_cell;
+  
+  /** The Material ID */
+  int _mat_id;
 
-  /** Characteristic point in Universe 0 that lies in FSR */
+  /** Characteristic point in Root Universe that lies in FSR */
   Point* _point;
 
+  /** Global numerical centroid in Root Universe */
+  Point* _centroid;
+
+  /** Destructor for fsr_data */
+  ~fsr_data() {
+    if (_point != NULL)
+      delete _point;
+
+    if (_centroid != NULL)
+      delete _centroid;
+  }
 };
 
 void reset_auto_ids();
@@ -55,34 +76,27 @@ class Geometry {
 
 private:
 
-  omp_lock_t* _num_FSRs_lock;
+  /** The boundary conditions at the x-min surface of the bounding box 
+   *  containing the Geometry. */
+  boundaryType _x_min_bc;
 
-  /** The boundary conditions at the top of the bounding box containing
-   *  the Geometry. False is for vacuum and true is for reflective BCs. */
-  boundaryType _top_bc;
+  /** The boundary conditions at the y-min surface of the bounding box 
+   *  containing the Geometry. */
+  boundaryType _y_min_bc;
 
-  /** The boundary conditions at the top of the bounding box containing
-   *  the Geometry. False is for vacuum and true is for reflective BCs. */
-  boundaryType _bottom_bc;
+  /** The boundary conditions at the x-max surface of the bounding box 
+   *  containing the Geometry. */
+  boundaryType _x_max_bc;
 
-  /** The boundary conditions at the top of the bounding box containing
-   *  the Geometry. False is for vacuum and true is for reflective BCs. */
-  boundaryType _left_bc;
-
-  /** The boundary conditions at the top of the bounding box containing
-   *  the Geometry. False is for vacuum and true is for reflective BCs. */
-  boundaryType _right_bc;
-
-  /** The total number of FSRs in the Geometry */
-  int _num_FSRs;
+  /** The boundary conditions at the y-max surface of the bounding box 
+   *  containing the Geometry. */
+  boundaryType _y_max_bc;
 
   /** An map of FSR key hashes to unique fsr_data structs */
-#ifndef CUDA
-  std::unordered_map<std::size_t, fsr_data> _FSR_keys_map;
-#endif
+  ParallelHashMap<std::string, fsr_data*> _FSR_keys_map;
 
   /** An vector of FSR key hashes indexed by FSR ID */
-  std::vector<std::size_t> _FSRs_to_keys;
+  std::vector<std::string> _FSRs_to_keys;
 
   /** A vector of Material IDs indexed by FSR IDs */
   std::vector<int> _FSRs_to_material_IDs;
@@ -105,8 +119,9 @@ public:
   virtual ~Geometry();
 
   /* Get parameters */
-  double getWidth();
-  double getHeight();
+  double getWidthX();
+  double getWidthY();
+  double getWidthZ();
   double getMinX();
   double getMaxX();
   double getMinY();
@@ -117,36 +132,32 @@ public:
   boundaryType getMaxXBoundaryType();
   boundaryType getMinYBoundaryType();
   boundaryType getMaxYBoundaryType();
-  boundaryType getMinZBoundaryType();
-  boundaryType getMaxZBoundaryType();
   Universe* getRootUniverse();
   int getNumFSRs();
   int getNumEnergyGroups();
   int getNumMaterials();
   int getNumCells();
-  std::map<int, Material*> getAllMaterials();
+  std::map<int, Universe*> getAllUniverses();
+  std::map<int, Cell*> getAllCells();
   std::map<int, Cell*> getAllMaterialCells();
+  std::map<int, Material*> getAllMaterials();
   void setRootUniverse(Universe* root_universe);
 
   Cmfd* getCmfd();
-  std::vector<std::size_t> getFSRsToKeys();
-  std::vector<int> getFSRsToMaterialIDs();
+  std::vector<std::string>* getFSRsToKeys();
+  std::vector<int>* getFSRsToMaterialIDs();
   int getFSRId(LocalCoords* coords);
   Point* getFSRPoint(int fsr_id);
+  Point* getFSRCentroid(int fsr_id);
   std::string getFSRKey(LocalCoords* coords);
-#ifndef CUDA
-  std::unordered_map<std::size_t, fsr_data> getFSRKeysMap();
-#endif
+  ParallelHashMap<std::string, fsr_data*>* getFSRKeysMap();
 
   /* Set parameters */
-  void setFSRsToMaterialIDs(std::vector<int> FSRs_to_material_IDs);
-  void setFSRsToKeys(std::vector<std::size_t> FSRs_to_keys);
-  void setNumFSRs(int num_fsrs);
+  void setFSRsToMaterialIDs(std::vector<int>* FSRs_to_material_IDs);
+  void setFSRsToKeys(std::vector<std::string>* FSRs_to_keys);
   void setCmfd(Cmfd* cmfd);
-
-#ifndef CUDA
-  void setFSRKeysMap(std::unordered_map<std::size_t, fsr_data> FSR_keys_map);
-#endif
+  void setFSRCentroid(int fsr, Point* centroid);
+  void setFSRKeysMap(ParallelHashMap<std::string, fsr_data*>* FSR_keys_map);
 
   /* Find methods */
   Cell* findCellContainingCoords(LocalCoords* coords);
@@ -158,6 +169,7 @@ public:
   void subdivideCells();
   void initializeFlatSourceRegions();
   void segmentize(Track* track);
+  void initializeFSRVectors();
   void computeFissionability(Universe* univ=NULL);
 
   std::string toString();
