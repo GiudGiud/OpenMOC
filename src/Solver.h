@@ -146,6 +146,9 @@ protected:
   /** The old scalar flux for each energy group in each FSR */
   FP_PRECISION* _old_scalar_flux;
 
+  /** Partial currents */
+  FP_PRECISION* _partial_currents;
+
   /** Optional user-specified fixed sources in each FSR and energy group */
   FP_PRECISION* _fixed_sources;
 

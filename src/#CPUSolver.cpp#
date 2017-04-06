@@ -719,7 +719,7 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
   memset(fsr_flux, 0.0, _num_groups * sizeof(FP_PRECISION));
 
   /* Compute change in angular flux along segment in this FSR and tally current*/
-  for (int e=0; e < _num_groups; e++) {
+  for (int e=0; e < _num_groups; e++) {   //////////////////////////////////// where are num_groups and num_polar sottred??  IN SOLVER CLASS
     for (int p=0; p < _num_polar_2; p++) {
       exponential = _exp_evaluator->computeExponential(sigma_t[e] * length, p);
       delta_psi = (track_flux(p,e)-_reduced_sources(fsr_id,e)) * exponential;
@@ -734,7 +734,7 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
   omp_set_lock(&_FSR_locks[fsr_id]);
   {
     for (int e=0; e < _num_groups; e++){
-      _scalar_flux(fsr_id,e) += fsr_flux[e];
+      _scalar_flux(fsr_id,e) += fsr_flux[e];  /////// WHERE IS IT? in SOLVER class, why accessible here?
       for (int p=0; p< _num_polar_2; p++){
 	//_partial_currents(p,e,fsr_id,next_fsr_id) += track_current(p,e);
         _partial_currents(p,e,fsr_id, next_fsr_id) += track_current[e*num_polar_2 + p]; 	
@@ -745,6 +745,9 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
   omp_unset_lock(&_FSR_locks[fsr_id]);
 }
 
+FP_PRECISION* getPartialCurrents(){
+  return _partial_currents;
+}
 
 
 

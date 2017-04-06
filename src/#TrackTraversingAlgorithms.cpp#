@@ -113,7 +113,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
   track_flux = _cpu_solver->getBoundaryFlux(track_id, true);
 
   /* Get the partial currents */
-  current = _cpu_solver->getPartialCurrents();
+  current = _cpu_solver->getPartialCurrents();  // prev? need to call it here?
 
   /* Loop over each Track segment in forward direction */
   for (int s=0; s < num_segments; s++) {
