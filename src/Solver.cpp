@@ -799,7 +799,13 @@ void Solver::computeFlux(int max_iters, solverMode mode,
     _num_iterations++;
 
     log_printf(NORMAL, "Iteration %d:\tres = %1.3E", i, residual);
-
+    
+    /* Set previous_partial_currents to ongoing_partial_currents and rest ongoing_partial_currents */
+    _swap_partials = _previous_partial_currents;
+    _previous_partial_currents = _ongoing_partial_currents;
+    _ongoing_partial_currents = _swap_partials;
+    resetOngoingPartialCurrentsArray();
+    
     /* Check for convergence */
     if (i > 1 && residual < _converge_thresh)
       break;

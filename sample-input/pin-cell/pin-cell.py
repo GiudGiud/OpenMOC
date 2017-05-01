@@ -83,8 +83,7 @@ geometry.setRootUniverse(root_universe)
 
 openmoc.log.py_printf('NORMAL', 'Initializing the track generator...')
 
-track_generator = openmoc.TrackGenerator(geometry, 32,
-                                         .01)
+track_generator = openmoc.TrackGenerator(geometry, 32, 0.01)
 track_generator.setNumThreads(opts.num_omp_threads)
 track_generator.generateTracks()
 
@@ -94,6 +93,16 @@ track_generator.generateTracks()
 ###############################################################################
 
 solver = openmoc.CPUSolver(track_generator)
+
+num_surfaces = 4;
+num_FSRs = 4;
+
+# My DF stuff
+solver.setNumSurfaces(num_surfaces)
+solver.initializePartialCurrentArrays(num_FSRs, 8)
+solver.setReferencePartialCurrents(0,1,0,1.2)
+print("Current set:", solver.getReferencePartialCurrents(0,1,0))
+
 solver.setNumThreads(opts.num_omp_threads)
 solver.setConvergenceThreshold(opts.tolerance)
 solver.computeEigenvalue(opts.max_iters)
@@ -109,9 +118,9 @@ openmoc.process.store_simulation_state(solver, use_hdf5=True)
 
 openmoc.log.py_printf('NORMAL', 'Plotting data...')
 
-openmoc.plotter.plot_quadrature(solver)
-openmoc.plotter.plot_tracks(track_generator)
-openmoc.plotter.plot_segments(track_generator)
+#openmoc.plotter.plot_quadrature(solver)
+#openmoc.plotter.plot_tracks(track_generator)
+#openmoc.plotter.plot_segments(track_generator)
 openmoc.plotter.plot_materials(geometry)
 openmoc.plotter.plot_cells(geometry)
 openmoc.plotter.plot_flat_source_regions(geometry)

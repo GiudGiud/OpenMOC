@@ -1292,3 +1292,37 @@ Cell* Geometry::findCellContainingFSR(int fsr_id) {
 
   return cell;
 }
+
+/**
+ * @brief Creates a map of cells containing FSRs
+ * @param
+ */
+std::map<int,Cell*>& Geometry::matchFSRstoCells() {
+
+  // map is initialized outside of function next to FSR_keys_map
+  
+  Point* centroid;
+  Cell* cell;
+  int fsr_id;
+//   std::vector<std::string>& FSRs_to_keys = _geometry->getFSRsToKeys();  // get list of hashes, each represent an FSR
+//   ParallelHashMap<std::string, fsr_data*>& FSR_keys_map = _geometry->getFSRKeysMap();  // get map from hashes to FSRs
+  
+  for(int i = 0; i < getNumFSRs(); i++){
+    
+    fsr_id = _FSR_keys_map.at(_FSRs_to_keys[fsr_id])->_fsr_id;
+    
+    centroid = _FSR_keys_map.at(_FSRs_to_keys[fsr_id])->_point;
+    LocalCoords* coords = new LocalCoords(centroid->getX(), centroid->getY(),
+					  centroid->getZ());
+    coords->setUniverse(_root_universe);
+    cell = findCellContainingCoords(coords);
+  
+    map_FSR_to_cells.insert(std::make_pair(fsr_id, cell));
+
+    coords->prune();
+    delete coords;
+  }
+  return map_FSR_to_cells;
+}
+
+

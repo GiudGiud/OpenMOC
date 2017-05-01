@@ -9,6 +9,13 @@
   import_array();
 %}
 
+
+/* Example
+*  The typemap used to match the method signature for the
+*  * CPUSolver::setReferencePartialCurrent setter method. This allows users to set the reference
+*  * partial currents in the Python API using vectors indexed by group
+* %apply (double* IN_ARRAY1, int DIM1) {(double* ref_current, int num_groups)}  */
+
 /* The typemap used to match the method signature for the
  * Lattice::setLatticeCells setter method. This allows users to set the lattice
  * cells (universe IDs) using a 2D NumPy array */

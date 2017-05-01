@@ -101,6 +101,10 @@ private:
   /** An map of FSR key hashes to unique fsr_data structs */
   ParallelHashMap<std::string, fsr_data*> _FSR_keys_map;
 
+  /** An map of FSR ids to cells */
+  //   ParallelHashMap<int, Cell*>& map_FSR_to_cells;  // map from fsr_ids to cells
+  std::map<int, Cell*> map_FSR_to_cells;  // map from fsr_ids to cells
+  
   /** An vector of FSR key hashes indexed by FSR ID */
   std::vector<std::string> _FSRs_to_keys;
 
@@ -155,6 +159,9 @@ public:
   std::string getFSRKey(LocalCoords* coords);
   ParallelHashMap<std::string, fsr_data*>& getFSRKeysMap();
 
+  /* My DF stuff */
+  std::map<int, Cell*>& matchFSRstoCells();
+  
   /* Set parameters */
   void setCmfd(Cmfd* cmfd);
   void setFSRCentroid(int fsr, Point* centroid);

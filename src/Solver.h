@@ -103,6 +103,9 @@ protected:
 
   /** The number of fissionable flat source regions */
   int _num_fissionable_FSRs;
+  
+  /** The number of surfaces */
+  int _num_surfaces = _num_FSRs * _num_FSRs;
 
   /** The FSR "volumes" (i.e., areas) indexed by FSR UID */
   FP_PRECISION* _FSR_volumes;
@@ -145,10 +148,16 @@ protected:
 
   /** The old scalar flux for each energy group in each FSR */
   FP_PRECISION* _old_scalar_flux;
+  
+  /** The reference partial currents for each group and each cell-cell couple*/
+  double** _reference_partial_currents;
+  int* _current_start_row_index; // which index the currents in ref_partial_currents start for each cell_from 
+  int* _current_column_index;    // which cell each element in ref_partial_currents is going to
+  double** _previous_partial_currents;  // partial currents in previous transport sweep
+  double** _ongoing_partial_currents;   // partial currents in ongoing transport sweep
+  double** _swap_partials;              // swap variable to swap the two previous ones after each transport sweep
 
-  /** Partial currents */
-  FP_PRECISION* _partial_currents;
-
+  
   /** Optional user-specified fixed sources in each FSR and energy group */
   FP_PRECISION* _fixed_sources;
 
@@ -228,7 +237,8 @@ public:
   virtual void countFissionableFSRs();
   virtual void initializeFixedSources();
   virtual void initializeCmfd();
-
+  virtual void resetOngoingPartialCurrentsArray();
+  
   virtual void resetMaterials(solverMode mode=FORWARD);
   virtual void fissionTransportSweep();
   virtual void scatterTransportSweep();

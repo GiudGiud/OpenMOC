@@ -56,7 +56,7 @@ public:
    * @param fsr_flux a pointer to the temporary FSR scalar flux buffer
    */
   virtual void tallyScalarFlux(segment* curr_segment, segment* next_segment, int azim_index,
-                               FP_PRECISION* track_flux, FP_PRECISION* fsr_flux, FP_PRECISION* partial_current);
+                               FP_PRECISION* track_flux, FP_PRECISION* fsr_flux, std::map<int, Cell*>& map_fsr_to_cells);
 
   /**
    * @brief Computes the contribution to surface current from a segment.
@@ -103,6 +103,26 @@ public:
   double computeResidual(residualType res_type);
 
   void computeFSRFissionRates(double* fission_rates, int num_FSRs);
+
+  void initializePartialCurrentArrays(int _num_FSRS, int _num_groups);
+//   void initializePartialCurrentArrays(int _num_FSRs, int _num_groups) {
+  
+  void setReferencePartialCurrents(int cell_from, int cell_to, int group, double ref_current);
+//   void setReferencePartialCurrents(int cell_from, int cell_to, int group, double ref_current)  
+  
+  void setNumSurfaces(int number_surfaces);
+//   void setNumSurfaces(int number_surfaces)
+  
+  double* getReferencePartialCurrent(int cell_to, int cell_from, int index);
+//   double* getReferencePartialCurrent(int cell_to, int cell_from, int index)
+
+
+  double getReferencePartialCurrent(int cell_to, int cell_from, int group, int index);
+//   double getReferencePartialCurrent(int cell_to, int cell_from, int group, int index)
+  
+//   void resetOngoingPartialCurrentsArray();
+  void resetOngoingPartialCurrentsArray(); 
+  
 };
 
 

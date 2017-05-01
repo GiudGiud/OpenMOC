@@ -1,5 +1,116 @@
 #include "CPUSolver.h"
 
+/**
+ * @brief Fills an array of reference partial currents
+ * @details This class method fills the array containing the partial currents 
+ * @param int cell_from, cell from which the partial current comes from
+ * @param int cell_to, cell to which the partial current goes
+ * @param int group, the energy group of this partial current
+ * @param double ref_current, the value of the partial current
+ */
+void CPUSolver::setReferencePartialCurrents(int cell_from, int cell_to, int group, double ref_current){  // double imposed because of python standard double
+
+  // Create row/cell_from indexes
+  int ii = 0;
+  if(_current_start_row_index[cell_from] != 0){
+  }  // row start index has already been found
+  else if(_current_start_row_index[cell_from] == 0){
+      if(cell_from==0){  // first time we fill in the currents
+          _current_start_row_index[cell_from] = 0;
+      }
+      else{  // not first time, let s look for when previous row ends
+          while(_current_column_index[_current_start_row_index[cell_from-1] + ii] != 0){
+              ii += 1;
+          }
+      _current_start_row_index[cell_from] = _current_start_row_index[cell_from - 1] + ii;
+      }
+  }
+  
+  // Create column indexes too
+  int row_start = _current_start_row_index[cell_from];  // should have created before if didnt exist
+  int column_index;
+  for(int ii=row_start; ii < _num_surfaces; ii++){      // loop through _reference_partial_currents vector and fill first zero positions
+      if(_reference_partial_currents[ii][group] == 0){
+          _reference_partial_currents[ii][group] = ref_current;
+          if(_current_column_index[ii] == 0){           // first reference current to be set for this couple
+              _current_column_index[ii] = cell_to;      // save the cell_to in column index array
+          }
+          else if (_current_column_index[ii] != cell_to){
+             std::cout << "issue there";
+             abort();
+          }
+          
+          column_index = ii - row_start;
+          break;
+      }
+  }
+  _reference_partial_currents[row_start + column_index][group] = ref_current;
+
+}
+
+/**
+ * @brief  
+ * @details 
+ * @param int cell_from, cell from which the partial current comes from
+ * @param int cell_to, cell to which the partial current goes
+ */
+double* CPUSolver::getReferencePartialCurrent(int cell_to, int cell_from, int index){
+  
+  int row_start = _current_start_row_index[cell_from];
+ 
+  // Find column index
+  int column_index = 0;
+  int row_end = _current_column_index[cell_from + 1] - 1;
+  for(int ii=row_start; ii < row_end; ii++){
+      if(_current_column_index[ii] == cell_to){
+          break;
+      }
+      column_index += 1;
+  }
+  index = row_start + column_index;
+  return _reference_partial_currents[row_start + column_index];
+}
+
+double CPUSolver::getReferencePartialCurrent(int cell_to, int cell_from, int group, int index){
+  
+  int row_start = _current_start_row_index[cell_from];
+ 
+  // Find column index
+  int column_index = 0;
+  int row_end = _current_column_index[cell_from + 1] - 1;
+  for(int ii=row_start; ii < row_end; ii++){
+      if(_current_column_index[ii] == cell_to){
+          break;
+      }
+      column_index += 1;
+  }
+  index = row_start + column_index;
+  return _reference_partial_currents[row_start + column_index][group];
+}
+
+/**
+ * @brief Replaces default value of num_surfaces 
+ * @details This class method allows to use the exact number of surfaces output by another code
+ * @param int number_surfaces, new value of _num_surfaces
+ */
+void CPUSolver::setNumSurfaces(int number_surfaces){
+    
+    _num_surfaces = number_surfaces;
+    
+}
+
+void CPUSolver::resetOngoingPartialCurrentsArray(){
+  
+  for(int ii=0; ii < _num_surfaces; ii++){
+      memset(_reference_partial_currents, 0.0, sizeof(double) * _num_groups);
+  }
+}
+/*
+void CPUSolver::setCurrentsCellFromIndexes(){  // to do if need to go faster
+}
+void CPUSolver::setCurrentsCellToIndexes(){
+} */
+
 
 /**
  * @brief Constructor initializes array pointers for Tracks and Materials.
@@ -164,6 +275,59 @@ void CPUSolver::initializeFluxArrays() {
   }
 }
 
+/**
+ * @brief Allocates memory for Reference Partial Currents (//// OTHER CURRENTS TOO?)
+ * @details Deletes memory for old current arrays if they were allocated
+ *          for a previous simulation.
+ */
+void CPUSolver::initializePartialCurrentArrays(int _num_FSRs, int _num_groups) {
+
+  /* Delete old partial current arrays if they exist */
+  if (_reference_partial_currents != NULL){
+    for(int ii=0; ii < _num_surfaces; ii++){
+        delete [] _reference_partial_currents[ii];
+    }
+    delete [] _reference_partial_currents;
+  }
+  
+  if (_current_start_row_index != NULL)
+    delete [] _current_start_row_index;
+  
+  if (_current_column_index != NULL)
+    delete [] _current_column_index;
+
+  if (_ongoing_partial_currents != NULL){
+  for(int ii=0; ii < _num_surfaces; ii++){
+      delete [] _ongoing_partial_currents[ii];
+    }
+  delete [] _ongoing_partial_currents;
+  }
+
+  if (_previous_partial_currents != NULL){
+  for(int ii=0; ii < _num_surfaces; ii++){
+      delete [] _previous_partial_currents[ii];
+    }
+  delete [] _previous_partial_currents;
+  }
+  
+  /* Allocate arrays for the reference partial currents */
+  std::cout << "Setting arrays s " <<  _num_surfaces << " f " << _num_FSRs << "  g " << _num_groups << std::endl;
+  _reference_partial_currents = new double*[_num_surfaces];
+  for(int ii=0; ii < _num_surfaces; ii++){
+      _reference_partial_currents[ii] = new double[_num_groups]();
+  }
+  _current_start_row_index = new int[_num_FSRs]();
+  _current_column_index = new int[_num_surfaces]();
+  
+  _ongoing_partial_currents = new double*[_num_surfaces];
+  for(int ii=0; ii < _num_surfaces; ii++){
+      _ongoing_partial_currents[ii] = new double[_num_groups]();
+  }
+  _previous_partial_currents = new double*[_num_surfaces];
+  for(int ii=0; ii < _num_surfaces; ii++){
+      _previous_partial_currents[ii] = new double[_num_groups]();
+  }
+}
 
 /**
  * @brief Allocates memory for FSR source arrays.
@@ -702,19 +866,29 @@ void CPUSolver::transportSweep() {
  * @param fwd
  */
 void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, int azim_index,
-                                FP_PRECISION* track_flux,
-                                FP_PRECISION* fsr_flux, FP_PRECISION* prev_partial_current) {  // FP_PRECISION* prev_current, FP_PRECISION* ref_current
-
-  // TWO options for prev_current and next current: store in cpu solver object OR bring through tallyscalarflux
-
+                                FP_PRECISION* track_flux, FP_PRECISION* fsr_flux, std::map<int, Cell*>& map_fsr_to_cell) {
 
   int fsr_id = curr_segment->_region_id;
   int next_fsr_id = next_segment->_region_id;
   FP_PRECISION length = curr_segment->_length;
   FP_PRECISION* sigma_t = curr_segment->_material->getSigmaT();
   FP_PRECISION delta_psi, exponential;
-  FP_PRECISION* track_current [_num_groups*_num_polar_2];   /////////////////////////////////////////////////
+  
+  // Temporary storage for partial currents
+  double track_current [_num_groups*_num_polar_2];
 
+  // Getting cells with fsr ids
+  Cell* Cell_from = map_fsr_to_cell[fsr_id];
+  Cell* Cell_to = map_fsr_to_cell[next_fsr_id];
+  
+  int cell_from = Cell_from->getId();
+  int cell_to = Cell_to->getId();
+  
+  int index_current;
+  // Get currents for these two cells
+  double* ref_partial_current = getReferencePartialCurrent(cell_from, cell_to, index_current);
+  double* prev_partial_current = _previous_partial_currents[index_current];
+  
   /* Set the FSR scalar flux buffer to zero */
   memset(fsr_flux, 0.0, _num_groups * sizeof(FP_PRECISION));
 
@@ -723,10 +897,14 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
     for (int p=0; p < _num_polar_2; p++) {
       exponential = _exp_evaluator->computeExponential(sigma_t[e] * length, p);
       delta_psi = (track_flux(p,e)-_reduced_sources(fsr_id,e)) * exponential;
-      fsr_flux[e] += delta_psi * _quadrature->getWeightInline(azim_index, p);
       track_flux(p,e) -= delta_psi;
+      
+      // Apply jump condition
+      track_flux(p,e) *= ref_partial_current[e] / prev_partial_current[e];
+      
+      fsr_flux[e] += delta_psi * _quadrature->getWeightInline(azim_index, p);
       //track_current(p,e) += _quadrature->getWeightInline(azim_index,p) * track_flux(p,e);
-      track_current[e*num_polar_2 + p] += _quadrature->getWeightInline(azim_index, p) * track_flux(p,e);
+      track_current[e*_num_polar_2 + p] += double(_quadrature->getWeightInline(azim_index, p) * track_flux(p,e));
     }
   }
 
@@ -736,10 +914,8 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
     for (int e=0; e < _num_groups; e++){
       _scalar_flux(fsr_id,e) += fsr_flux[e];
       for (int p=0; p< _num_polar_2; p++){
-	//_partial_currents(p,e,fsr_id,next_fsr_id) += track_current(p,e);
-        _partial_currents(p,e,fsr_id, next_fsr_id) += track_current[e*num_polar_2 + p]; 	
-
-   }
+        _ongoing_partial_currents[index_current][e] += track_current[e*_num_polar_2 + p]; 	
+      }
     }
   }
   omp_unset_lock(&_FSR_locks[fsr_id]);
