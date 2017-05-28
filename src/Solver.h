@@ -195,6 +195,10 @@ protected:
   Cmfd* _cmfd;
 
   void clearTimerSplits();
+  
+  /* My DF Stuff */
+  virtual void resetOngoingPartialCurrentsArray() = 0;
+  
 
 public:
   Solver(TrackGenerator* track_generator=NULL);
@@ -237,7 +241,6 @@ public:
   virtual void countFissionableFSRs();
   virtual void initializeFixedSources();
   virtual void initializeCmfd();
-  virtual void resetOngoingPartialCurrentsArray();
   
   virtual void resetMaterials(solverMode mode=FORWARD);
   virtual void fissionTransportSweep();

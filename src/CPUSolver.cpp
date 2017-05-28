@@ -1,6 +1,27 @@
 #include "CPUSolver.h"
 
 /**
+ * @brief Constructor initializes array pointers for Tracks and Materials.
+ * @details The constructor retrieves the number of energy groups and FSRs
+ *          and azimuthal angles from the Geometry and TrackGenerator if
+ *          passed in as parameters by the user. The constructor initalizes
+ *          the number of OpenMP threads to a default of 1.
+ * @param track_generator an optional pointer to the TrackGenerator
+ */
+CPUSolver::CPUSolver(TrackGenerator* track_generator)
+  : Solver(track_generator) {
+
+  setNumThreads(1);
+  _FSR_locks = NULL;
+  
+  /* Initalizing to NULL to be able to check if they have been filled before */
+  _reference_partial_currents = NULL;
+  _current_start_row_index = NULL; // which index the currents in ref_partial_currents start for each cell_from 
+  _current_column_index = NULL;    // which cell each element in ref_partial_currents is going to  
+  
+}
+
+/**
  * @brief Fills an array of reference partial currents
  * @details This class method fills the array containing the partial currents 
  * @param int cell_from, cell from which the partial current comes from
@@ -54,7 +75,7 @@ void CPUSolver::setReferencePartialCurrents(int cell_from, int cell_to, int grou
  * @param int cell_from, cell from which the partial current comes from
  * @param int cell_to, cell to which the partial current goes
  */
-double* CPUSolver::getReferencePartialCurrent(int cell_to, int cell_from, int index){
+double* CPUSolver::getReferencePartialCurrents(int cell_to, int cell_from, int index){
   
   int row_start = _current_start_row_index[cell_from];
  
@@ -100,33 +121,11 @@ void CPUSolver::setNumSurfaces(int number_surfaces){
 }
 
 void CPUSolver::resetOngoingPartialCurrentsArray(){
-  
+
   for(int ii=0; ii < _num_surfaces; ii++){
       memset(_reference_partial_currents, 0.0, sizeof(double) * _num_groups);
   }
 }
-/*
-void CPUSolver::setCurrentsCellFromIndexes(){  // to do if need to go faster
-}
-void CPUSolver::setCurrentsCellToIndexes(){
-} */
-
-
-/**
- * @brief Constructor initializes array pointers for Tracks and Materials.
- * @details The constructor retrieves the number of energy groups and FSRs
- *          and azimuthal angles from the Geometry and TrackGenerator if
- *          passed in as parameters by the user. The constructor initalizes
- *          the number of OpenMP threads to a default of 1.
- * @param track_generator an optional pointer to the TrackGenerator
- */
-CPUSolver::CPUSolver(TrackGenerator* track_generator)
-  : Solver(track_generator) {
-
-  setNumThreads(1);
-  _FSR_locks = NULL;
-}
-
 
 /**
  * @brief Returns the number of shared memory OpenMP threads in use.
@@ -282,13 +281,14 @@ void CPUSolver::initializeFluxArrays() {
  */
 void CPUSolver::initializePartialCurrentArrays(int _num_FSRs, int _num_groups) {
 
+  std::cout << "Checking if arrays to be deleted" << std::endl;
   /* Delete old partial current arrays if they exist */
-  if (_reference_partial_currents != NULL){
-    for(int ii=0; ii < _num_surfaces; ii++){
-        delete [] _reference_partial_currents[ii];
-    }
-    delete [] _reference_partial_currents;
-  }
+//   for(int ii=0; ii < _num_surfaces; ii++){
+//     if (_reference_partial_currents[ii] != NULL){              // ISSUE, going through vector doest exist ?
+//       delete [] _reference_partial_currents[ii];
+//     }
+//   }
+//     delete [] _reference_partial_currents;
   
   if (_current_start_row_index != NULL)
     delete [] _current_start_row_index;
@@ -296,19 +296,19 @@ void CPUSolver::initializePartialCurrentArrays(int _num_FSRs, int _num_groups) {
   if (_current_column_index != NULL)
     delete [] _current_column_index;
 
-  if (_ongoing_partial_currents != NULL){
-  for(int ii=0; ii < _num_surfaces; ii++){
-      delete [] _ongoing_partial_currents[ii];
-    }
-  delete [] _ongoing_partial_currents;
-  }
+//   if (_ongoing_partial_currents != NULL){ // ISSUE, going through vector doest exist ?
+//   for(int ii=0; ii < _num_surfaces; ii++){
+//       delete [] _ongoing_partial_currents[ii];
+//     }
+//   delete [] _ongoing_partial_currents;
+//   }
 
-  if (_previous_partial_currents != NULL){
-  for(int ii=0; ii < _num_surfaces; ii++){
-      delete [] _previous_partial_currents[ii];
-    }
-  delete [] _previous_partial_currents;
-  }
+//   if (_previous_partial_currents != NULL){ // ISSUE, going through vector doest exist ?
+//   for(int ii=0; ii < _num_surfaces; ii++){
+//       delete [] _previous_partial_currents[ii];
+//     }
+//   delete [] _previous_partial_currents;
+//   }
   
   /* Allocate arrays for the reference partial currents */
   std::cout << "Setting arrays s " <<  _num_surfaces << " f " << _num_FSRs << "  g " << _num_groups << std::endl;
@@ -867,7 +867,8 @@ void CPUSolver::transportSweep() {
  */
 void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, int azim_index,
                                 FP_PRECISION* track_flux, FP_PRECISION* fsr_flux, std::map<int, Cell*>& map_fsr_to_cell) {
-
+  
+//   std::cout << "yaaaa" << std::endl << std::endl;;
   int fsr_id = curr_segment->_region_id;
   int next_fsr_id = next_segment->_region_id;
   FP_PRECISION length = curr_segment->_length;
@@ -875,19 +876,27 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
   FP_PRECISION delta_psi, exponential;
   
   // Temporary storage for partial currents
+//   std::cout << "Going to create track current";
   double track_current [_num_groups*_num_polar_2];
 
+//   std::cout << "Going to get cell indexes" << std::endl;;
   // Getting cells with fsr ids
-  Cell* Cell_from = map_fsr_to_cell[fsr_id];
-  Cell* Cell_to = map_fsr_to_cell[next_fsr_id];
-  
+//   Cell* Cell_from = map_fsr_to_cell[fsr_id];
+//   Cell* Cell_to = map_fsr_to_cell[next_fsr_id];
+  Cell* Cell_from = map_fsr_to_cell.find(fsr_id)->second;
+  Cell* Cell_to = map_fsr_to_cell.find(next_fsr_id)->second;
+
+//   std::cout << "Getting cell ids" << std::endl;;
   int cell_from = Cell_from->getId();
+//   std::cout << "Cell from " << cell_from << std::endl;;
   int cell_to = Cell_to->getId();
+//   std::cout << "Cell to" << cell_to << std::endl;;
+  
   
   int index_current;
   // Get currents for these two cells
-  double* ref_partial_current = getReferencePartialCurrent(cell_from, cell_to, index_current);
-  double* prev_partial_current = _previous_partial_currents[index_current];
+  double* ref_partial_current; //= getReferencePartialCurrents(cell_from, cell_to, index_current);
+  double* prev_partial_current; // = _previous_partial_currents[index_current];
   
   /* Set the FSR scalar flux buffer to zero */
   memset(fsr_flux, 0.0, _num_groups * sizeof(FP_PRECISION));
@@ -900,11 +909,14 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
       track_flux(p,e) -= delta_psi;
       
       // Apply jump condition
-      track_flux(p,e) *= ref_partial_current[e] / prev_partial_current[e];
+//       track_flux(p,e) *= ref_partial_current[e] / prev_partial_current[e];
+      track_flux(p,e) *= 1;
       
       fsr_flux[e] += delta_psi * _quadrature->getWeightInline(azim_index, p);
-      //track_current(p,e) += _quadrature->getWeightInline(azim_index,p) * track_flux(p,e);
+      
+//       std::cout <<" Adding to track current " << std::endl;
       track_current[e*_num_polar_2 + p] += double(_quadrature->getWeightInline(azim_index, p) * track_flux(p,e));
+//       printf("Added to track current \n");
     }
   }
 

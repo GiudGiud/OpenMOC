@@ -160,7 +160,8 @@ public:
   ParallelHashMap<std::string, fsr_data*>& getFSRKeysMap();
 
   /* My DF stuff */
-  std::map<int, Cell*>& matchFSRstoCells();
+  void matchFSRstoCells();
+  std::map<int,Cell*>& getMapFSRstoCells();
   
   /* Set parameters */
   void setCmfd(Cmfd* cmfd);

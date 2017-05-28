@@ -112,16 +112,17 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
   /* Get the forward track flux */
   track_flux = _cpu_solver->getBoundaryFlux(track_id, true);
 
-  /* Get the partial currents */
-//   current = _cpu_solver->getPartialCurrents();
-
   /* Make a map of FSRs to cells */
-  std::map<int,Cell*>& map_fsr_to_cell = _track_generator->getGeometry()->matchFSRstoCells(); 
+  std::map<int,Cell*>& map_fsr_to_cell = _track_generator->getGeometry()->getMapFSRstoCells(); 
 
   /* Loop over each Track segment in forward direction */
   for (int s=0; s < num_segments; s++) {
     segment* curr_segment = &segments[s];
     segment* next_segment = &segments[std::min(s+1, num_segments-1)];
+    
+//     std::cout << "Doing segment " << s <<" mat:" << curr_segment->_material << " region " << curr_segment->_region_id << std::endl;
+//     std::cout << "Next segment " << std::min(s+1, num_segments-1) <<" mat:" << next_segment->_material << " region " << next_segment->_region_id << std::endl;
+    
     _cpu_solver->tallyScalarFlux(curr_segment, next_segment, azim_index, track_flux,
                                  thread_fsr_flux, map_fsr_to_cell);
     _cpu_solver->tallyCurrent(curr_segment, azim_index, track_flux, true);

@@ -55,7 +55,7 @@ public:
    * @param track_flux a pointer to the Track's angular flux
    * @param fsr_flux a pointer to the temporary FSR scalar flux buffer
    */
-  virtual void tallyScalarFlux(segment* curr_segment, segment* next_segment, int azim_index,
+  void tallyScalarFlux(segment* curr_segment, segment* next_segment, int azim_index,
                                FP_PRECISION* track_flux, FP_PRECISION* fsr_flux, std::map<int, Cell*>& map_fsr_to_cells);
 
   /**
@@ -105,24 +105,12 @@ public:
   void computeFSRFissionRates(double* fission_rates, int num_FSRs);
 
   void initializePartialCurrentArrays(int _num_FSRS, int _num_groups);
-//   void initializePartialCurrentArrays(int _num_FSRs, int _num_groups) {
-  
   void setReferencePartialCurrents(int cell_from, int cell_to, int group, double ref_current);
-//   void setReferencePartialCurrents(int cell_from, int cell_to, int group, double ref_current)  
-  
   void setNumSurfaces(int number_surfaces);
-//   void setNumSurfaces(int number_surfaces)
-  
-  double* getReferencePartialCurrent(int cell_to, int cell_from, int index);
-//   double* getReferencePartialCurrent(int cell_to, int cell_from, int index)
-
-
+  double* getReferencePartialCurrents(int cell_to, int cell_from, int index);
   double getReferencePartialCurrent(int cell_to, int cell_from, int group, int index);
-//   double getReferencePartialCurrent(int cell_to, int cell_from, int group, int index)
-  
-//   void resetOngoingPartialCurrentsArray();
   void resetOngoingPartialCurrentsArray(); 
-  
+  //   _track_generator->getGeometry()->matchFSRstoCells();
 };
 
 
