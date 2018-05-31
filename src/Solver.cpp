@@ -977,17 +977,17 @@ void Solver::computeEigenvalue(int max_iters, solverMode mode,
   initializeCmfd();
   
   /* Partial current arrays are initialized in Python API rn */
-  ////////////////////////////////////////////////////////////
+
   // Create map of FSR to cells
   _track_generator->getGeometry()->matchFSRstoCells();
   
   // Check
+  std::cout << "Map from FSRs to cells" << std::endl;
   std::map<int,Cell*>& map_fsr_to_cell = _track_generator->getGeometry()->getMapFSRstoCells(); 
   for(int i = 0; i < _track_generator->getGeometry()->getNumFSRs(); i ++ ){
-    std::cout << "FSR "<< i << " -> Cell id " << map_fsr_to_cell.find(i)->second->getId() << std::endl;
-    std::cout << "FSR "<< i << " -> Cell name " << map_fsr_to_cell.find(i)->second->getName() << std::endl;
-    std::cout << "FSR "<< i << " -> Cell surfs " << map_fsr_to_cell.find(i)->second->getNumSurfaces() << std::endl;
-    std::cout << "FSR "<< i << " -> Cell vol " << map_fsr_to_cell.find(i)->second->getVolume() << std::endl;
+    std::cout << "FSR "<< i << " -> Cell id " <<
+         map_fsr_to_cell.find(i)->second->getId() <<
+         " name " << map_fsr_to_cell.find(i)->second->getName() << std::endl;
   }
   std::cout << std::endl;
   

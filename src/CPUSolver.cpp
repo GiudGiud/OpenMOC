@@ -868,7 +868,6 @@ void CPUSolver::transportSweep() {
 void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, int azim_index,
                                 FP_PRECISION* track_flux, FP_PRECISION* fsr_flux, std::map<int, Cell*>& map_fsr_to_cell) {
   
-//   std::cout << "yaaaa" << std::endl << std::endl;;
   int fsr_id = curr_segment->_region_id;
   int next_fsr_id = next_segment->_region_id;
   FP_PRECISION length = curr_segment->_length;
@@ -876,27 +875,14 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
   FP_PRECISION delta_psi, exponential;
   
   // Temporary storage for partial currents
-//   std::cout << "Going to create track current";
   double track_current [_num_groups*_num_polar_2];
 
-//   std::cout << "Going to get cell indexes" << std::endl;;
-  // Getting cells with fsr ids
-//   Cell* Cell_from = map_fsr_to_cell[fsr_id];
-//   Cell* Cell_to = map_fsr_to_cell[next_fsr_id];
   Cell* Cell_from = map_fsr_to_cell.find(fsr_id)->second;
   Cell* Cell_to = map_fsr_to_cell.find(next_fsr_id)->second;
-
-//   std::cout << "Getting cell ids" << std::endl;;
   int cell_from = Cell_from->getId();
-//   std::cout << "Cell from " << cell_from << std::endl;;
   int cell_to = Cell_to->getId();
-//   std::cout << "Cell to" << cell_to << std::endl;;
-  
-  
-  int index_current;
-  // Get currents for these two cells
-  double* ref_partial_current; //= getReferencePartialCurrents(cell_from, cell_to, index_current);
-  double* prev_partial_current; // = _previous_partial_currents[index_current];
+
+  int index_partial_current;  /////////////////////////////////
   
   /* Set the FSR scalar flux buffer to zero */
   memset(fsr_flux, 0.0, _num_groups * sizeof(FP_PRECISION));
@@ -908,15 +894,9 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
       delta_psi = (track_flux(p,e)-_reduced_sources(fsr_id,e)) * exponential;
       track_flux(p,e) -= delta_psi;
       
-      // Apply jump condition
-//       track_flux(p,e) *= ref_partial_current[e] / prev_partial_current[e];
-      track_flux(p,e) *= 1;
-      
       fsr_flux[e] += delta_psi * _quadrature->getWeightInline(azim_index, p);
       
-//       std::cout <<" Adding to track current " << std::endl;
       track_current[e*_num_polar_2 + p] += double(_quadrature->getWeightInline(azim_index, p) * track_flux(p,e));
-//       printf("Added to track current \n");
     }
   }
 
@@ -925,8 +905,10 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment, in
   {
     for (int e=0; e < _num_groups; e++){
       _scalar_flux(fsr_id,e) += fsr_flux[e];
-      for (int p=0; p< _num_polar_2; p++){
-        _ongoing_partial_currents[index_current][e] += track_current[e*_num_polar_2 + p]; 	
+      for (int p=0; p<_num_polar_2; p++){
+        _ongoing_partial_currents[index_partial_current]
+                [e*_num_polar_2*_num_azim + azim_index*_num_polar_2 + p]
+                += track_current[e*_num_polar_2 + p]; 	
       }
     }
   }
