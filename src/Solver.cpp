@@ -77,6 +77,13 @@ Solver::~Solver() {
   if (_exp_evaluator != NULL)
     delete _exp_evaluator;
 
+  if (_ongoing_partial_currents != NULL){
+    for(int s = 0; s<_num_surfaces; s++){
+      delete [] _ongoing_partial_currents[s];
+    }
+    delete [] _ongoing_partial_currents;
+  }
+
   if (_timer != NULL)
     delete _timer;
 }
@@ -981,7 +988,7 @@ void Solver::computeEigenvalue(int max_iters, solverMode mode,
   // Create map of FSR to cells
   _track_generator->getGeometry()->matchFSRstoCells();
   
-  // Check
+  // Check map
   std::cout << "Map from FSRs to cells" << std::endl;
   std::map<int,Cell*>& map_fsr_to_cell = _track_generator->getGeometry()->getMapFSRstoCells(); 
   for(int i = 0; i < _track_generator->getGeometry()->getNumFSRs(); i ++ ){
@@ -1022,6 +1029,9 @@ void Solver::computeEigenvalue(int max_iters, solverMode mode,
     /* Check for convergence */
     if (i > 1 && residual < _converge_thresh)
       break;
+
+    /* Reset angular partial current array */
+    resetOngoingPartialCurrentsArray();
   }
 
   if (_num_iterations == max_iters-1)
