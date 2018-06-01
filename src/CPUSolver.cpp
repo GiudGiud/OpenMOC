@@ -114,7 +114,7 @@ double* CPUSolver::getReferencePartialCurrents(int cell_from, int cell_to, int* 
   int column_index = 0;
   int row_end = _current_start_row_index[cell_from - 1 + 1] - 1;
   for(int ii = row_start; ii < row_end; ii++){
-      std::cout << _current_column_index[ii] << std::endl;
+      //std::cout << _current_column_index[ii] << std::endl;
       if(_current_column_index[ii] == cell_to - 1){ //FIXME
           break;
       }
