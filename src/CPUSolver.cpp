@@ -58,8 +58,10 @@ void CPUSolver::setReferencePartialCurrents(int cell_from, int cell_to, int grou
   }
 
   /* to avoid a bug for other currents */
-  if(ref_current == 0)
-      ref_current = 1e-15; std::cout << "!!! Zero current !!!"<<std::endl;
+  if(ref_current == 0){
+      ref_current = 1e-15; 
+      std::cout << "!!! Zero current !!!"<<std::endl;
+  }
   
   // Create column indexes too
   int row_start = _current_start_row_index[cell_from];
@@ -90,11 +92,11 @@ void CPUSolver::setReferencePartialCurrents(int cell_from, int cell_to, int grou
 //   std::cout << std::endl;
 //   std::cout << _num_FSRs << " " << _num_surfaces << std::endl;
    std::cout << row_start << " + " << column_index << std::endl;
-   std::cout << "Start row index";
-   for(int ii = 0; ii < _num_FSRs; ii++){std::cout << _current_start_row_index[ii] << " ";}
+   std::cout << "Start row index : ";
+   for(int ii = 0; ii < 2*_num_surfaces; ii++){std::cout << _current_start_row_index[ii] << " ";}
    std::cout << std::endl;
-   std::cout << "Cell to for each column";
-   for(int ii = 0; ii < _num_surfaces; ii++){std::cout << _current_column_index[ii] << " ";}
+   std::cout << "Cell to for each column : ";
+   for(int ii = 0; ii < 2*_num_surfaces; ii++){std::cout << _current_column_index[ii] << " ";}
    std::cout << std::endl;
 }
 
@@ -124,7 +126,8 @@ double* CPUSolver::getReferencePartialCurrents(int cell_from, int cell_to, int* 
   *index = row_start + column_index;
 
   /* Debug print */
-  std::cout << cell_from << " " << cell_to << " " << *index << std::endl;
+  std::cout << "cell from->to " << cell_from << " " << " -> " << cell_to << 
+       " " << *index << std::endl;
 
   return _reference_partial_currents[row_start + column_index];
 }
@@ -328,17 +331,17 @@ void CPUSolver::initializePartialCurrentArrays(int _num_FSRs, int _num_groups) {
         << _num_FSRs << " fsrs, " << _num_groups << " energy groups" << std::endl;
 
   _current_start_row_index = new int[_num_FSRs]();
-  _current_column_index = new int[_num_surfaces]();
+  _current_column_index = new int[2*_num_surfaces]();
   
   /* Initialize column indexes as -1, to error if problem during initialization */
-  _current_column_index = new int[_num_surfaces];
-  for(int ii = 0; ii < _num_surfaces; ii++){_current_column_index[ii] = -1;}
+  _current_column_index = new int[2*_num_surfaces];
+  for(int ii = 0; ii < 2*_num_surfaces; ii++){_current_column_index[ii] = -1;}
   
-  _ongoing_partial_currents = new double*[_num_surfaces];
+  _ongoing_partial_currents = new double*[2*_num_surfaces];
   for(int ii=0; ii < _num_surfaces; ii++){
       _ongoing_partial_currents[ii] = new double[_num_groups*_num_polar_2*_num_azim]();
   }
-  _reference_partial_currents = new double*[_num_surfaces];
+  _reference_partial_currents = new double*[2*_num_surfaces];
   for(int ii=0; ii < _num_surfaces; ii++){
       _reference_partial_currents[ii] = new double[_num_groups*_num_polar_2*_num_azim]();
   }
