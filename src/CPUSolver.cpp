@@ -24,43 +24,42 @@ CPUSolver::CPUSolver(TrackGenerator* track_generator)
 
 /**
  * @brief Fills an array of reference partial currents and two indexing arrays
- * @details This class method fills - the array containing the partial currents,
- * @details - the array containing the index of the row where currents from a cell start
- * @details - the array containing the cell_to 
- * @param int cell_from, cell from which the partial current comes from
- * @param int cell_to, cell to which the partial current goes
- * @param int group, the energy group of this partial current
- * @param double ref_current, the value of the partial current
+ * @details This class method fills 
+ *  - the array containing the reference partial currents,
+ *  - the array containing the index of the row where currents from a given cell start
+ *  - the array containing the cell_to of these currents
+ * @param cell_from, cell from which the partial current comes from
+ * @param cell_to, cell to which the partial current goes
+ * @param p the polar angle index
+ * @param group, the energy group of this partial current
+ * @param ref_current, the value of the partial current
  */
+void CPUSolver::setReferencePartialCurrents(int cell_from, int cell_to, int group, int p, double ref_current){
 
-/**
- * @brief Fills an array of reference partial currents and two indexing arrays
- * @details This class method fills - the array containing the partial currents,
- * @details - the array containing the index of the row where currents from a cell start
- * @details - the array containing the cell_to 
- * @param int cell_from, cell from which the partial current comes from
- * @param int cell_to, cell to which the partial current goes
- * @param int group, the energy group of this partial current
- * @param double ref_current, the value of the partial current
- */
-void CPUSolver::setReferencePartialCurrents(int cell_from, int cell_to, int group, int p, double ref_current){  // double imposed because of python standard double
-
-  // Create row / cell_from indexes
+  /* Create row : cell_from indexes */
   int ii = 0;
-  if(_current_start_row_index[cell_from] != 0){  // row start index has already been found
-  }  
-  else if(_current_start_row_index[cell_from] == 0){
-      if(cell_from == 0){  // first time we fill in the currents
+
+  std::cout << "Row start now " << _current_start_row_index[cell_from] << std::endl;
+
+  /* If the index of the beginning of the row hasn't been set yet */
+  if(_current_start_row_index[cell_from] == 0){
+
+      /* first time we fill in the currents is with cell_from = 0 */
+      if(cell_from == 0){
           _current_start_row_index[cell_from] = 0;
       }
-      else{  // not first time, let s look for when previous row ends
+      /* not first time, let s look for when previous row ends */
+      else{
           while(_current_column_index[_current_start_row_index[cell_from - 1] + ii] != -1){ 
               ii += 1;
           }
       _current_start_row_index[cell_from] = _current_start_row_index[cell_from - 1] + ii;
       }
   }
-  if(ref_current == 0){ref_current = 1e-15; std::cout << "!!! Zero current !!!"<<std::endl;}  // to avoid a bug for other currents
+
+  /* to avoid a bug for other currents */
+  if(ref_current == 0)
+      ref_current = 1e-15; std::cout << "!!! Zero current !!!"<<std::endl;
   
   // Create column indexes too
   int row_start = _current_start_row_index[cell_from];
@@ -90,13 +89,13 @@ void CPUSolver::setReferencePartialCurrents(int cell_from, int cell_to, int grou
   // Print all 3 arrays to check 
 //   std::cout << std::endl;
 //   std::cout << _num_FSRs << " " << _num_surfaces << std::endl;
-//   std::cout << row_start << " + " << column_index << std::endl;
-//   std::cout << "Start row index";
-//   for(int ii = 0; ii < _num_FSRs; ii++){std::cout << _current_start_row_index[ii] << " ";}
-//   std::cout << std::endl;
-//   std::cout << "Cell to for each column";
-//   for(int ii = 0; ii < _num_surfaces; ii++){std::cout << _current_column_index[ii] << " ";}
-//   std::cout << std::endl;
+   std::cout << row_start << " + " << column_index << std::endl;
+   std::cout << "Start row index";
+   for(int ii = 0; ii < _num_FSRs; ii++){std::cout << _current_start_row_index[ii] << " ";}
+   std::cout << std::endl;
+   std::cout << "Cell to for each column";
+   for(int ii = 0; ii < _num_surfaces; ii++){std::cout << _current_column_index[ii] << " ";}
+   std::cout << std::endl;
 }
 
 
@@ -115,13 +114,17 @@ double* CPUSolver::getReferencePartialCurrents(int cell_from, int cell_to, int* 
   int column_index = 0;
   int row_end = _current_start_row_index[cell_from - 1 + 1] - 1;
   for(int ii = row_start; ii < row_end; ii++){
+      std::cout << _current_column_index[ii] << std::endl;
       if(_current_column_index[ii] == cell_to - 1){ //FIXME
           break;
       }
       column_index += 1;
   }
+  std::cout << row_start << " " << column_index << std::endl;
   *index = row_start + column_index;
-  //std::cout << cell_from << " " << cell_to << " " << *index << std::endl;
+
+  /* Debug print */
+  std::cout << cell_from << " " << cell_to << " " << *index << std::endl;
 
   return _reference_partial_currents[row_start + column_index];
 }
@@ -326,7 +329,6 @@ void CPUSolver::initializePartialCurrentArrays(int _num_FSRs, int _num_groups) {
 
   _current_start_row_index = new int[_num_FSRs]();
   _current_column_index = new int[_num_surfaces]();
-  
   
   /* Initialize column indexes as -1, to error if problem during initialization */
   _current_column_index = new int[_num_surfaces];
@@ -874,10 +876,11 @@ void CPUSolver::transportSweep() {
  *          energy groups and polar angles, and tallies it into the FSR
  *          scalar flux, and updates the Track's angular flux.
  * @param curr_segment a pointer to the Track segment of interest
- * @param azim_index a pointer to the azimuthal angle index for this segment
+ * @param next_segment a pointer to the next segment to know current to tally to
+ * @param azim_index azimuthal angle index for this segment
  * @param track_flux a pointer to the Track's angular flux
  * @param fsr_flux a pointer to the temporary FSR flux buffer
- * @param fwd
+ * @param map_fsr_to_cell a map to find which current to tally to
  */
 void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment,
                                 int azim_index, FP_PRECISION* track_flux,
@@ -890,13 +893,13 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, segment* next_segment,
   FP_PRECISION* sigma_t = curr_segment->_material->getSigmaT();
   FP_PRECISION delta_psi, exponential;
   
-  // Temporary storage for partial currents
+  // Temporary storage for partial currents (OTF allocation is slow, change!)
   double track_current [_num_groups*_num_polar_2];
 
   Cell* Cell_from = map_fsr_to_cell.find(fsr_id)->second;
   Cell* Cell_to = map_fsr_to_cell.find(next_fsr_id)->second;
-  int cell_from = Cell_from->getId();
-  int cell_to = Cell_to->getId();
+  int cell_from = Cell_from->getId() - 10000;
+  int cell_to = Cell_to->getId() - 10000;
 
   /* Get index for storing partial currents */
   double* ref_partial_current;

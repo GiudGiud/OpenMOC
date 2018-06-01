@@ -111,11 +111,11 @@ solver.initializePartialCurrentArrays(num_FSRs, num_groups)
 
 # Set a dummy reference partial current, to initial the current array data structures
 # This needs to be done for every surface (=pair of cell_from and cell_to), otherwise
-# segfault
+# segfault. Start by cell_from = 0, otherwise won't work
 solver.setReferencePartialCurrents(cell_from, cell_to, group, polar_index, current)
 solver.setReferencePartialCurrents(cell_to, cell_from, group, polar_index, current)
 
-solver.setNumThreads(opts.num_omp_threads)
+solver.setNumThreads(1)  # change to 2*n_cores
 solver.setConvergenceThreshold(opts.tolerance)
 solver.computeEigenvalue(opts.max_iters)
 solver.printTimerReport()

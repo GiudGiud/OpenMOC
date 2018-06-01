@@ -104,7 +104,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
   int track_id = track->getUid();
   int azim_index = track->getAzimAngleIndex();
   int num_segments = track->getNumSegments();
-  FP_PRECISION* track_flux, partial_current;   // CODING CONVENTIONS ????
+  FP_PRECISION* track_flux, partial_current;
 
   /* Correct azimuthal index to first octant */
   Quadrature* quad = _track_generator->getQuadrature();
@@ -120,8 +120,8 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     segment* curr_segment = &segments[s];
     segment* next_segment = &segments[std::min(s+1, num_segments-1)];
     
-//     std::cout << "Doing segment " << s <<" mat:" << curr_segment->_material << " region " << curr_segment->_region_id << std::endl;
-//     std::cout << "Next segment " << std::min(s+1, num_segments-1) <<" mat:" << next_segment->_material << " region " << next_segment->_region_id << std::endl;
+    std::cout << "Doing segment " << s <<" mat:" << curr_segment->_material << " region " << curr_segment->_region_id << std::endl;
+    std::cout << "Next segment " << std::min(s+1, num_segments-1) <<" mat:" << next_segment->_material << " region " << next_segment->_region_id << std::endl;
     
     _cpu_solver->tallyScalarFlux(curr_segment, next_segment, azim_index, track_flux,
                                  thread_fsr_flux, map_fsr_to_cell);
