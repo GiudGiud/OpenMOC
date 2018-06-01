@@ -6,7 +6,7 @@ import openmoc
 
 opts = openmoc.options.Options()
 
-openmoc.log.set_log_level('DEBUG')
+openmoc.log.set_log_level('NORMAL')
 
 
 ###############################################################################
@@ -117,7 +117,7 @@ solver.setReferencePartialCurrents(cell_to, cell_from, group, polar_index, curre
 
 solver.setNumThreads(1)  # change to opts.num_omp_threads
 solver.setConvergenceThreshold(opts.tolerance)
-solver.computeEigenvalue(1)
+solver.computeEigenvalue(opts.max_iters)
 solver.printTimerReport()
 
 openmoc.process.store_simulation_state(solver, use_hdf5=True)
@@ -138,7 +138,7 @@ current_10 = solver.getAngularPartialCurrent(1-cell_from, 1-cell_to, azim, polar
 # Access by surface index
 solver.getOngoingPartialCurrent(0, azim, polar, group)
 
-print("Current from cell 0 to 1", current_01
+print("Current from cell 0 to 1", current_01)
 print("Current from cell 1 to 0", current_10)
 
 ###############################################################################
