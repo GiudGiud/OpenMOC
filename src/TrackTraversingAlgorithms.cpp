@@ -120,8 +120,8 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     segment* curr_segment = &segments[s];
     segment* next_segment = &segments[std::min(s+1, num_segments-1)];
     
-    //std::cout << "Doing segment " << s <<" mat:" << curr_segment->_material << " region " << curr_segment->_region_id << std::endl;
-    //std::cout << "Next segment " << std::min(s+1, num_segments-1) <<" mat:" << next_segment->_material << " region " << next_segment->_region_id << std::endl;
+    log_printf(DEBUG, "Doing segment   %d in region %d", s, curr_segment->_region_id);
+    log_printf(DEBUG, "Next segment is %d in region %d", s, curr_segment->_region_id);
     
     _cpu_solver->tallyScalarFlux(curr_segment, next_segment, azim_index, track_flux,
                                  thread_fsr_flux, map_fsr_to_cell);

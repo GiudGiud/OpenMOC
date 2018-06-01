@@ -103,11 +103,14 @@ group = 2
 polar_index = 0
 current = 1.1
 
-# Initialize arrays for currents
+# Initialize arrays for currents - part 1 : allocate memory
 solver.setNumSurfaces(num_surfaces)
 solver.initializePartialCurrentArrays()
 
-# Set a dummy reference partial current, to initial the current array data structures
+# Initialize arrays for currents - part 2 : create arrays with indices of where to get 
+# the current for a given (cell_from, cell_to) couple
+
+# Set a dummy reference partial current, to initialize the current array data structures
 # This needs to be done for every surface (=pair of cell_from and cell_to), otherwise
 # segfault. Start by cell_from = 0, otherwise won't work. Here we have two cells 0 and 1,
 # so we set the current for 0->1 and the current for 1->0
@@ -115,7 +118,7 @@ solver.setReferencePartialCurrents(cell_from, cell_to, group, polar_index, curre
 solver.setReferencePartialCurrents(cell_to, cell_from, group, polar_index, current)
 
 
-solver.setNumThreads(1)  # change to opts.num_omp_threads
+solver.setNumThreads(1)  # change to opts.num_omp_threads when done debugging
 solver.setConvergenceThreshold(opts.tolerance)
 solver.computeEigenvalue(opts.max_iters)
 solver.printTimerReport()
