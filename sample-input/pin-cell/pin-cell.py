@@ -6,7 +6,7 @@ import openmoc
 
 opts = openmoc.options.Options()
 
-openmoc.log.set_log_level('NORMAL')
+openmoc.log.set_log_level('DEBUG')
 
 
 ###############################################################################
@@ -95,8 +95,6 @@ track_generator.generateTracks()
 solver = openmoc.CPUSolver(track_generator)
 
 num_surfaces = 1
-num_FSRs = 4
-num_groups = 8
 
 # DUMMY variables to show arguments
 cell_from = 0 
@@ -107,22 +105,41 @@ current = 1.1
 
 # Initialize arrays for currents
 solver.setNumSurfaces(num_surfaces)
-solver.initializePartialCurrentArrays(num_FSRs, num_groups)
+solver.initializePartialCurrentArrays()
 
 # Set a dummy reference partial current, to initial the current array data structures
 # This needs to be done for every surface (=pair of cell_from and cell_to), otherwise
-# segfault. Start by cell_from = 0, otherwise won't work
+# segfault. Start by cell_from = 0, otherwise won't work. Here we have two cells 0 and 1,
+# so we set the current for 0->1 and the current for 1->0
 solver.setReferencePartialCurrents(cell_from, cell_to, group, polar_index, current)
 solver.setReferencePartialCurrents(cell_to, cell_from, group, polar_index, current)
 
-solver.setNumThreads(1)  # change to 2*n_cores
+
+solver.setNumThreads(1)  # change to opts.num_omp_threads
 solver.setConvergenceThreshold(opts.tolerance)
-solver.computeEigenvalue(opts.max_iters)
+solver.computeEigenvalue(1)
 solver.printTimerReport()
 
 openmoc.process.store_simulation_state(solver, use_hdf5=True)
 #simulation_state = openmoc.process.restore_simulation_state(filename='states.h5')
 
+###############################################################################
+#                     Obtain partial currents from MOC
+###############################################################################
+
+azim = 4
+polar = 1
+group = 2
+
+# Access by cell from, cell_to
+current_01 = solver.getAngularPartialCurrent(cell_from, cell_to, azim, polar, group)
+current_10 = solver.getAngularPartialCurrent(1-cell_from, 1-cell_to, azim, polar, group)
+
+# Access by surface index
+solver.getOngoingPartialCurrent(0, azim, polar, group)
+
+print("Current from cell 0 to 1", current_01
+print("Current from cell 1 to 0", current_10)
 
 ###############################################################################
 #                             Generating Plots

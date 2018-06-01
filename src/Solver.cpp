@@ -78,8 +78,15 @@ Solver::~Solver() {
   if (_exp_evaluator != NULL)
     delete _exp_evaluator;
 
+  if (_reference_partial_currents != NULL){
+    for(int s = 0; s<2*_num_surfaces; s++){
+      delete [] _reference_partial_currents[s];
+    }
+    delete [] _reference_partial_currents;
+  }
+
   if (_ongoing_partial_currents != NULL){
-    for(int s = 0; s<_num_surfaces; s++){
+    for(int s = 0; s<2*_num_surfaces; s++){
       delete [] _ongoing_partial_currents[s];
     }
     delete [] _ongoing_partial_currents;
@@ -530,6 +537,8 @@ void Solver::initializeFSRs() {
   _num_FSRs = _geometry->getNumFSRs();
   _num_materials = _geometry->getNumMaterials();
   _num_groups = _geometry->getNumEnergyGroups();
+  log_printf(INFO, "Number of groups %d", _num_groups);
+  
   _polar_times_groups = _num_groups * _num_polar_2;
 
   /* Get an array of volumes indexed by FSR  */
@@ -801,6 +810,9 @@ void Solver::computeFlux(int max_iters, solverMode mode,
   /* Source iteration loop */
   for (int i=0; i < max_iters; i++) {
 
+    /* Reset ongoing_partial_currents */
+    resetOngoingPartialCurrentsArray();
+
     transportSweep();
     addSourceToScalarFlux();
     residual = computeResidual(SCALAR_FLUX);
@@ -808,12 +820,6 @@ void Solver::computeFlux(int max_iters, solverMode mode,
     _num_iterations++;
 
     log_printf(NORMAL, "Iteration %d:\tres = %1.3E", i, residual);
-    
-    /* Set previous_partial_currents to ongoing_partial_currents and rest ongoing_partial_currents */
-    _swap_partials = _previous_partial_currents;
-    _previous_partial_currents = _ongoing_partial_currents;
-    _ongoing_partial_currents = _swap_partials;
-    resetOngoingPartialCurrentsArray();
     
     /* Check for convergence */
     if (i > 1 && residual < _converge_thresh)
@@ -1008,6 +1014,10 @@ void Solver::computeEigenvalue(int max_iters, solverMode mode,
 
   /* Source iteration loop */
   for (int i=0; i < max_iters; i++) {
+
+    /* Reset angular partial current array */
+    resetOngoingPartialCurrentsArray();
+
     normalizeFluxes();
     computeFSRSources();
     transportSweep();
@@ -1031,9 +1041,6 @@ void Solver::computeEigenvalue(int max_iters, solverMode mode,
     /* Check for convergence */
     if (i > 1 && residual < _converge_thresh)
       break;
-
-    /* Reset angular partial current array */
-    resetOngoingPartialCurrentsArray();
   }
 
   if (_num_iterations == max_iters-1)
