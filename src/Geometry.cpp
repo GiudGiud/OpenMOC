@@ -1299,38 +1299,28 @@ Cell* Geometry::findCellContainingFSR(int fsr_id) {
  */
 void Geometry::matchFSRstoCells() {
 
-  std::cout << "Creating FSR to cell map in geometry.h" << std::endl;
+  std::cout << "Creating FSR to cell map" << std::endl;
   // map is initialized outside of function next to FSR_keys_map
   
   Point* centroid;
   Cell* cell;
   int fsr_id;
-//   std::vector<std::string>& FSRs_to_keys = _geometry->getFSRsToKeys();  // get list of hashes, each represent an FSR
-//   ParallelHashMap<std::string, fsr_data*>& FSR_keys_map = _geometry->getFSRKeysMap();  // get map from hashes to FSRs
-  std::cout << "num fsr" << getNumFSRs() << " size fsr_key_map " << _FSR_keys_map.size() << std::endl;
-  
+
   for(int i = 0; i < _FSR_keys_map.size(); i++){ //getNumFSRs()
-    std::cout << "Doing FSR n " << i << std::endl;
-//     std::cout << "Keys " << _FSRs_to_keys[0] << " " << _FSRs_to_keys[1] << std::endl;
-//     std::cout << "Key " << _FSRs_to_keys[i] << std::endl;
     
     fsr_id = _FSR_keys_map.at(_FSRs_to_keys[i])->_fsr_id;
-    std::cout << "that stuff "<< std::endl;   ///////////////////////////////
     
     centroid = _FSR_keys_map.at(_FSRs_to_keys[fsr_id])->_point;
     LocalCoords* coords = new LocalCoords(centroid->getX(), centroid->getY(),
 					  centroid->getZ());
     coords->setUniverse(_root_universe);
     cell = findCellContainingCoords(coords);
-    std::cout << "this stuff "<< std::endl;
   
     map_FSR_to_cells.insert(std::make_pair(fsr_id, cell));
 
     coords->prune();
     delete coords;
-    std::cout << "Done FSR n " << i << std::endl;
   }
-//   return map_FSR_to_cells;
 }
 
 /**

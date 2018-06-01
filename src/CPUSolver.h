@@ -105,10 +105,10 @@ public:
   void computeFSRFissionRates(double* fission_rates, int num_FSRs);
 
   void initializePartialCurrentArrays(int _num_FSRS, int _num_groups);
-  void setReferencePartialCurrents(int cell_from, int cell_to, int group, double ref_current);
   void setNumSurfaces(int number_surfaces);
-  double* getReferencePartialCurrents(int cell_to, int cell_from, int index);
-  double getReferencePartialCurrent(int cell_to, int cell_from, int group, int index);
+  void setReferencePartialCurrents(int cell_from, int cell_to, int group, int p, double ref_current);
+  double* getReferencePartialCurrents(int cell_from, int cell_to, int* index);
+  double getOngoingPartialCurrent(int index, int group, int azim, int p);
   void resetOngoingPartialCurrentsArray(); 
   //   _track_generator->getGeometry()->matchFSRstoCells();
 };

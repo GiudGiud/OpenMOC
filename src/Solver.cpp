@@ -30,6 +30,7 @@ Solver::Solver(TrackGenerator* track_generator) {
   _reduced_sources = NULL;
   _quadrature = NULL;
   _num_polar_2 = 0;
+  _num_azim = 0;
 
   if (track_generator != NULL)
     setTrackGenerator(track_generator);
@@ -357,6 +358,7 @@ void Solver::setTrackGenerator(TrackGenerator* track_generator) {
   _track_generator = track_generator;
   _quadrature = track_generator->getQuadrature();
   _num_polar_2 = _quadrature->getNumPolarAngles() / 2;
+  _num_azim = _quadrature->getNumAzimAngles();
   _tot_num_tracks = _track_generator->getNumTracks();
   _tracks = _track_generator->getTracksArray();
 

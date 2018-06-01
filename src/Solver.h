@@ -125,6 +125,9 @@ protected:
   /** Half the number of polar angles */
   int _num_polar_2;
 
+  /** Number of azimuthal angle */
+  int _num_azim;
+
   /** A pointer to the quadrature */
   Quadrature* _quadrature;
 

@@ -94,14 +94,26 @@ track_generator.generateTracks()
 
 solver = openmoc.CPUSolver(track_generator)
 
-num_surfaces = 4;
-num_FSRs = 4;
+num_surfaces = 1
+num_FSRs = 4
+num_groups = 8
 
-# My DF stuff
+# DUMMY variables to show arguments
+cell_from = 0 
+cell_to = 1
+group = 2
+polar_index = 0
+current = 1.1
+
+# Initialize arrays for currents
 solver.setNumSurfaces(num_surfaces)
-solver.initializePartialCurrentArrays(num_FSRs, 8)
-solver.setReferencePartialCurrents(0,1,0,1.2)
-print("Current set:", solver.getReferencePartialCurrents(0,1,0))
+solver.initializePartialCurrentArrays(num_FSRs, num_groups)
+
+# Set a dummy reference partial current, to initial the current array data structures
+# This needs to be done for every surface (=pair of cell_from and cell_to), otherwise
+# segfault
+solver.setReferencePartialCurrents(cell_from, cell_to, group, polar_index, current)
+solver.setReferencePartialCurrents(cell_to, cell_from, group, polar_index, current)
 
 solver.setNumThreads(opts.num_omp_threads)
 solver.setConvergenceThreshold(opts.tolerance)
