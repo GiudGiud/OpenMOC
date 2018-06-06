@@ -210,6 +210,7 @@ void ExpEvaluator::initialize() {
       slope = - expon / sin_theta;
       _exp_table[_num_polar * i + 2 * p] = slope;
       _exp_table[_num_polar * i + 2 * p + 1] = intercept;
+      log_printf(DEBUG, "slope %f, intercept %f", slope, intercept);
     }
   }
 }
