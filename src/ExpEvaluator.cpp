@@ -171,7 +171,7 @@ void ExpEvaluator::initialize() {
   int num_array_values = _max_optical_length * sqrt(1. / (8. * _exp_precision));
   FP_PRECISION exp_table_spacing = _max_optical_length / num_array_values;
 
-  /* Increment the number of vaues in the array to ensure that a tau equal to
+  /* Increment the number of values in the array to ensure that a tau equal to
    * max_optical_length resides as the final entry in the table */
   num_array_values += 1;
 
