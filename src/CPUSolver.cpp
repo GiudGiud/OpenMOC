@@ -1664,7 +1664,7 @@ void CPUSolver::computeKeff() {
 
   double* FSR_rates = _regionwise_scratch;
 
-  double fission;
+  double fission[0];
 
   /* Compute the old nu-fission rates in each FSR */
 #pragma omp parallel
@@ -1688,7 +1688,7 @@ void CPUSolver::computeKeff() {
   }
 
   /* Reduce new fission rates across FSRs */
-  fission = pairwise_sum<double>(FSR_rates, _num_FSRs);
+  fission[0] = pairwise_sum<double>(FSR_rates, _num_FSRs);
 
 #ifdef MPIx
   /* Reduce rates across domians */
@@ -1698,15 +1698,15 @@ void CPUSolver::computeKeff() {
     MPI_Comm comm = _geometry->getMPICart();
 
     /* Copy local rates */
-    double local_rate;
-      local_rate = fission;
+    double local_rate[0];
+    local_rate[0] = fission[0];
 
     /* Reduce computed rates */
     MPI_Allreduce(local_rate, fission, 1, MPI_DOUBLE, MPI_SUM, comm);
   }
 #endif
 
-  _k_eff *= fission / _num_FSRs;
+  _k_eff *= fission[0] / _num_FSRs;
 }
 
 
