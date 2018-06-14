@@ -53,8 +53,7 @@
                                                 + (j)*_fluxes_per_track \
                                                + (pe)])
 
-#define _track_flux_buffer(i,j,pe) (_track_flux_buffer[(i)*2*_fluxes_per_track \
-                                                + (j)*_fluxes_per_track \
+#define _track_flux_buffer(i,pe) (_track_flux_buffer[(i)*_fluxes_per_track \
                                                + (pe)])
 
 /** Indexing scheme for fixed sources for each FSR and energy group */
@@ -232,7 +231,10 @@ protected:
   float* _start_flux;
 
   /* Buffer for the track angular fluxes to avoid double saving them */
-  float* _track_flux_buffer;
+  std::vector<float*> _track_flux_buffer;
+
+  /* Whether buffer has been updated with starting flux on track */
+  std::vector<bool*> _buffer_updated;
 
   /** The angular leakages for each Track. This array stores the weighted
     * outgoing angular fluxes for use in non-CMFD eigenvalue calculations. */
@@ -452,6 +454,8 @@ public:
                          residualType res_type=FISSION_SOURCE);
   void printBGQMemory();
 
+  bool* getBufferUpdateArray(int tid);
+
  /**
   * @brief Computes the volume-weighted, energy integrated fission rate in
   *        each FSR and stores them in an array indexed by FSR ID.
@@ -476,20 +480,25 @@ public:
    * @param fwd Whether the direction of the angular flux along the track is
    *        forward (True) or backward (False)
    */
-  inline float* getBoundaryFlux(long track_id, long index, bool fwd) {
+  inline float* getBoundaryFlux(long track_id, long index, int tid, bool fwd) {
 
     /* Copy flux from boundary into buffer */ //TODO replace by a mem copy
-    for (int pe; pe<_fluxes_per_track; ++pe)
-      _track_flux_buffer(index, !fwd, pe) = _start_flux(track_id, !fwd, pe);
+    if (_buffer_updated.at(tid)[index] == 0){
+      for (int pe=0; pe<_fluxes_per_track; ++pe){
+        _track_flux_buffer.at(tid)[index*_fluxes_per_track + pe] = 
+                             _start_flux(track_id, !fwd, pe);
+       }
+      _buffer_updated.at(tid)[index] = 1;
+    }
 
-    return &_track_flux_buffer(index, !fwd, 0);
+    return &_track_flux_buffer.at(tid)[index*_fluxes_per_track];
     //return &_boundary_flux(track_id, !fwd, 0);
   }
 
   //FIXME
-  inline float* getBoundaryFluxFromBuffer(long index, bool fwd) {
+  inline float* getBoundaryFluxFromBuffer(long index, int tid, bool fwd) {
 
-    return &_track_flux_buffer(index, !fwd, 0);
+    return &_track_flux_buffer.at(tid)[index*_fluxes_per_track];
   }
 
   void setVerboseIterationReport();

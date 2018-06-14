@@ -372,25 +372,8 @@ void CPUSolver::zeroTrackFluxes() {
   for (long t=0; t < _tot_num_tracks; t++) {
     for (int d=0; d < 2; d++) {
       for (int pe=0; pe < _fluxes_per_track; pe++) {
-        _boundary_flux(t, d, pe) = 0.0;
         _start_flux(t, d, pe) = 0.0;
       }
-    }
-  }
-}
-
-
-/**
- * @brief Copies values from the start flux into the boundary flux array
- *        for both the "forward" and "reverse" directions.
- */
-void CPUSolver::copyBoundaryFluxes() {
-
-#pragma omp parallel for schedule(guided)
-  for (long t=0; t < _tot_num_tracks; t++) {
-    for (int d=0; d < 2; d++) {
-      for (int pe=0; pe < _fluxes_per_track; pe++)
-        _boundary_flux(t,d,pe) = _start_flux(t, d, pe);
     }
   }
 }
@@ -1745,9 +1728,6 @@ void CPUSolver::transportSweep() {
   /* Initialize flux in each FSR to zero */
   flattenFSRFluxes(0.0);
 
-  /* Copy starting flux to current flux */
-  //copyBoundaryFluxes();
-
   /* Tally the starting fluxes to boundaries */
   if (_cmfd != NULL)
     if (_cmfd->isSigmaTRebalanceOn())
@@ -1918,6 +1898,8 @@ void CPUSolver::transferBoundaryFlux(Track* track,
     for (int pe=0; pe < _fluxes_per_track; pe++)
       track_out_flux[pe] = track_flux[pe];
   }
+  else
+    log_printf(ERROR, "Fluxes not transfered -> buffer invalid?");
   if (bc_in == VACUUM) {
     long track_id = track->getUid();
     float* track_in_flux = &_start_flux(track_id, !direction, 0);

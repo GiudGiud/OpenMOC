@@ -118,6 +118,13 @@ Solver::~Solver() {
   if (_reduced_sources != NULL)
     delete [] _reduced_sources;
 
+  for (int i=0; i < _track_flux_buffer.size(); i++){
+    delete [] _track_flux_buffer.at(i);
+    delete [] _buffer_updated.at(i);
+   }
+  _track_flux_buffer.clear();
+  _buffer_updated.clear();
+
   if (_boundary_leakage != NULL)
     delete [] _boundary_leakage;
 
@@ -1011,16 +1018,27 @@ void Solver::initializeTrackFluxBuffer(){
 
   /* Get max number of angular fluxes used at the same time */
   int buffer_size;
-  if (_solve_3D) //FIXME use ray tracing options
+  if (_segment_formation == OTF_STACKS)
     buffer_size = _track_generator_3D->getMaxNumTracksPerStack();
   else
     buffer_size = 1;
 
   log_printf(NORMAL, "Allocating track angular flux buffer for %d track fluxes", 
              buffer_size);
-  buffer_size *= (2 * _fluxes_per_track); //FIXME no need for both directions //FIXME need to use omp
+  buffer_size *= _fluxes_per_track;
 
-  _track_flux_buffer = new float[buffer_size]();
+  int num_threads = omp_get_max_threads();
+  _track_flux_buffer.resize(num_threads);
+  _buffer_updated.resize(num_threads);
+  for (int i=0; i < num_threads; i++){
+    _track_flux_buffer.at(i) = new float[buffer_size]();
+    _buffer_updated.at(i) = new bool[buffer_size]();
+  }
+}
+
+
+bool* Solver::getBufferUpdateArray(int tid){
+  return _buffer_updated.at(tid);
 }
 
 

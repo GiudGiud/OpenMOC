@@ -339,6 +339,8 @@ void TransportKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
                               FP_PRECISION y_start, FP_PRECISION z_start,
                               FP_PRECISION phi, FP_PRECISION theta) {
 
+  int tid = omp_get_thread_num();
+
   if (track_idx < _min_track_idx)
     _min_track_idx = track_idx;
   else if (track_idx > _max_track_idx)
@@ -383,7 +385,7 @@ void TransportKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
 
     /* Get the backward track flux */
     long curr_track_id = _track_id + track_idx;
-    float* track_flux = _cpu_solver->getBoundaryFlux(curr_track_id, i,
+    float* track_flux = _cpu_solver->getBoundaryFlux(curr_track_id, i, tid,
                                                      _direction);
 
     /* Apply MOC equations */
@@ -400,8 +402,9 @@ void TransportKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
 
 //FIXME
 void TransportKernel::post() {
+  int tid = omp_get_thread_num();
   for (int i=_min_track_idx; i <= _max_track_idx; i++) {
-    float* track_flux = _cpu_solver->getBoundaryFlux(_track_id+i, i,
+    float* track_flux = _cpu_solver->getBoundaryFlux(_track_id+i, i, tid,
                                                      _direction);
     Track track;
     //_sti._z = i; FIXME THIS IS BROKEN

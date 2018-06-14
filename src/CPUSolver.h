@@ -76,7 +76,6 @@ protected:
 
 
   void zeroTrackFluxes();
-  void copyBoundaryFluxes();
   void tallyStartingCurrents();
 #ifdef MPIx
   void setupMPIBuffers();
