@@ -53,6 +53,10 @@
                                                 + (j)*_fluxes_per_track \
                                                + (pe)])
 
+#define _track_flux_buffer(i,j,pe) (_track_flux_buffer[(i)*2*_fluxes_per_track \
+                                                + (j)*_fluxes_per_track \
+                                               + (pe)])
+
 /** Indexing scheme for fixed sources for each FSR and energy group */
 #define _fixed_sources(r,e) (_fixed_sources[(r)*_num_groups + (e)])
 
@@ -227,6 +231,9 @@ protected:
   float* _boundary_flux;
   float* _start_flux;
 
+  /* Buffer for the track angular fluxes to avoid double saving them */
+  float* _track_flux_buffer;
+
   /** The angular leakages for each Track. This array stores the weighted
     * outgoing angular fluxes for use in non-CMFD eigenvalue calculations. */
   float* _boundary_leakage;
@@ -309,6 +316,7 @@ protected:
 
   virtual void initializeExpEvaluators();
   virtual void initializeFSRs();
+  virtual void initializeTrackFluxBuffer();
   void countFissionableFSRs();
   void checkXS();
   virtual void initializeCmfd();
@@ -468,8 +476,20 @@ public:
    * @param fwd Whether the direction of the angular flux along the track is
    *        forward (True) or backward (False)
    */
-  inline float* getBoundaryFlux(long track_id, bool fwd) {
-    return &_boundary_flux(track_id, !fwd, 0);
+  inline float* getBoundaryFlux(long track_id, long index, bool fwd) {
+
+    /* Copy flux from boundary into buffer */ //TODO replace by a mem copy
+    for (int pe; pe<_fluxes_per_track; ++pe)
+      _track_flux_buffer(index, !fwd, pe) = _start_flux(track_id, !fwd, pe);
+
+    return &_track_flux_buffer(index, !fwd, 0);
+    //return &_boundary_flux(track_id, !fwd, 0);
+  }
+
+  //FIXME
+  inline float* getBoundaryFluxFromBuffer(long index, bool fwd) {
+
+    return &_track_flux_buffer(index, !fwd, 0);
   }
 
   void setVerboseIterationReport();

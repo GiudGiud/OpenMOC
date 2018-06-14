@@ -230,11 +230,12 @@ void CPUSolver::initializeFluxArrays() {
 #endif
     double max_size_mb = (double) (2 * max_size * sizeof(float))
         / (double) (1e6);
-    log_printf(NORMAL, "Max boundary angular flux storage per domain = %6.2f "
+    log_printf(NORMAL, "Max boundary angular flux storage per domain = %6.2f " //TODO update that
                "MB", max_size_mb);
 
     _boundary_flux = new float[size];
     _start_flux = new float[size];
+
     memset(_boundary_flux, 0., size * sizeof(float));
     memset(_start_flux, 0., size * sizeof(float));
 
@@ -1745,7 +1746,7 @@ void CPUSolver::transportSweep() {
   flattenFSRFluxes(0.0);
 
   /* Copy starting flux to current flux */
-  copyBoundaryFluxes();
+  //copyBoundaryFluxes();
 
   /* Tally the starting fluxes to boundaries */
   if (_cmfd != NULL)

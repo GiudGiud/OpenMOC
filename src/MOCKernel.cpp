@@ -383,7 +383,7 @@ void TransportKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
 
     /* Get the backward track flux */
     long curr_track_id = _track_id + track_idx;
-    float* track_flux = _cpu_solver->getBoundaryFlux(curr_track_id,
+    float* track_flux = _cpu_solver->getBoundaryFlux(curr_track_id, i,
                                                      _direction);
 
     /* Apply MOC equations */
@@ -401,7 +401,7 @@ void TransportKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
 //FIXME
 void TransportKernel::post() {
   for (int i=_min_track_idx; i <= _max_track_idx; i++) {
-    float* track_flux = _cpu_solver->getBoundaryFlux(_track_id+i,
+    float* track_flux = _cpu_solver->getBoundaryFlux(_track_id+i, i,
                                                      _direction);
     Track track;
     //_sti._z = i; FIXME THIS IS BROKEN

@@ -923,7 +923,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     /* Get the forward track flux */
     segment* curr_segment = &segments[s];
     long curr_track_id = track_id + curr_segment->_track_idx;
-    track_flux = _cpu_solver->getBoundaryFlux(curr_track_id, true);
+    track_flux = _cpu_solver->getBoundaryFlux(curr_track_id, curr_segment->_track_idx, true);
 
     /* Apply MOC equations */
     if (_ls_solver == NULL)
@@ -941,7 +941,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
 
   /* Transfer boundary angular flux to outgoing Track */
   for (int i=0; i <= max_track_index; i++) {
-    track_flux = _cpu_solver->getBoundaryFlux(track_id+i, true);
+    track_flux = _cpu_solver->getBoundaryFluxFromBuffer(i, true);
     _cpu_solver->transferBoundaryFlux(tracks_array[i], azim_index, polar_index,
                                       true, track_flux);
   }
@@ -956,7 +956,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     /* Get the backward track flux */
     segment* curr_segment = &segments[s];
     long curr_track_id = track_id + curr_segment->_track_idx;
-    track_flux = _cpu_solver->getBoundaryFlux(curr_track_id, false);
+    track_flux = _cpu_solver->getBoundaryFlux(curr_track_id, curr_segment->_track_idx, false);
 
     /* Apply MOC equations */
     if (_ls_solver == NULL)
@@ -975,7 +975,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
 
   /* Transfer boundary angular flux to outgoing Track */
   for (int i=0; i <= max_track_index; i++) {
-    track_flux = _cpu_solver->getBoundaryFlux(track_id+i, false);
+    track_flux = _cpu_solver->getBoundaryFluxFromBuffer(i, false);
     _cpu_solver->transferBoundaryFlux(tracks_array[i], azim_index, polar_index,
                                       false, track_flux);
   }

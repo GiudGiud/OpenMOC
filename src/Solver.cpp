@@ -998,6 +998,33 @@ void Solver::initializeFixedSources() {
 
 
 /**
+ * @brief Initialize a buffer for track angular fluxes.
+ * @details Track angular fluxes live in this buffer when being transported
+ *          over a track. This avoids having another array which contains 
+ *          fluxes for all tracks.
+ */
+void Solver::initializeTrackFluxBuffer(){
+
+  /* Get 3D track generator */
+  TrackGenerator3D* _track_generator_3D;
+  _track_generator_3D = dynamic_cast<TrackGenerator3D*>(_track_generator);
+
+  /* Get max number of angular fluxes used at the same time */
+  int buffer_size;
+  if (_solve_3D) //FIXME use ray tracing options
+    buffer_size = _track_generator_3D->getMaxNumTracksPerStack();
+  else
+    buffer_size = 1;
+
+  log_printf(NORMAL, "Allocating track angular flux buffer for %d track fluxes", 
+             buffer_size);
+  buffer_size *= (2 * _fluxes_per_track); //FIXME no need for both directions //FIXME need to use omp
+
+  _track_flux_buffer = new float[buffer_size]();
+}
+
+
+/**
  * @brief Initializes a Cmfd object for acceleratiion prior to source iteration.
  * @details Instantiates a dummy Cmfd object if one was not assigned to
  *          the Solver by the user and initializes FSRs, materials, fluxes
@@ -1187,6 +1214,7 @@ void Solver::computeFlux(int max_iters, bool only_fixed_source) {
   initializeSourceArrays();
   countFissionableFSRs();
   initializeExpEvaluators();
+  initializeTrackFluxBuffer();
 
   /* Initialize new flux arrays if a) the user requested the use of
    * only fixed sources or b) no previous simulation was performed which
@@ -1291,6 +1319,7 @@ void Solver::computeSource(int max_iters, double k_eff, residualType res_type) {
   initializeExpEvaluators();
   initializeFluxArrays();
   initializeSourceArrays();
+  initializeTrackFluxBuffer();
 
   /* Guess flat spatial scalar flux for each region */
   if (_chi_spectrum_material == NULL)
@@ -1372,6 +1401,7 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
   countFissionableFSRs();
   initializeExpEvaluators();
   initializeFluxArrays();
+  initializeTrackFluxBuffer();
   initializeSourceArrays();
   initializeCmfd();
   _geometry->fixFSRMaps();
