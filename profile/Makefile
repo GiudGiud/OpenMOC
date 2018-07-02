@@ -4,9 +4,10 @@
 
 COMPILER    = gnu
 OPENMP      = yes
-OPTIMIZE    = yes
+OPTIMIZE    = no
 DEBUG       = no
 PROFILE     = no
+COVERAGE    = yes
 PRECISION   = single
 
 #===============================================================================
@@ -95,6 +96,12 @@ endif
 # Profiling Flags
 ifeq ($(PROFILE),yes)
   CFLAGS += -pg
+endif
+
+# Profiling Flags
+ifeq ($(COVERAGE),yes)
+  CFLAGS += --coverage
+  LDFLAGS += --coverage
 endif
 
 # Precision Flags
