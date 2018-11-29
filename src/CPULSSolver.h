@@ -76,7 +76,7 @@ public:
                                     FP_PRECISION* fsr_flux_y,
                                     FP_PRECISION* fsr_flux_z,
                                     float* track_flux,
-                                    FP_PRECISION direction[3]);
+                                    FP_PRECISION direction[3], FP_PRECISION sin_theta);
   void accumulateLinearFluxContribution(long fsr_id, FP_PRECISION* fsr_flux,
                                         FP_PRECISION* fsr_flux_x,
                                         FP_PRECISION* fsr_flux_y,

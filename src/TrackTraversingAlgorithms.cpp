@@ -851,10 +851,10 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
 
   /* Compute unit vector if necessary */
   FP_PRECISION direction[3];
+  double sin_theta = 1.0;
   if (_ls_solver != NULL) {
     double phi = track->getPhi();
     double cos_theta = 0.0;
-    double sin_theta = 1.0;
     if (track_3D != NULL) {
       double theta = track_3D->getTheta();
       cos_theta = cos(theta);
@@ -903,7 +903,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     else
       _ls_solver->tallyLSScalarFlux(curr_segment, azim_index, polar_index,
                                     fsr_flux, fsr_flux_x, fsr_flux_y, 
-                                    fsr_flux_z, track_flux, direction);
+                                    fsr_flux_z, track_flux, direction, (FP_PRECISION) sin_theta);
 
     /* Accumulate contribution of segments to scalar flux before changing fsr */
     if (s < num_segments - 1 && fsr_id != (&segments[s+1])->_region_id) {
@@ -946,7 +946,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     else
       _ls_solver->tallyLSScalarFlux(curr_segment, azim_index, polar_index,
                                     fsr_flux, fsr_flux_x, fsr_flux_y, 
-                                    fsr_flux_z, track_flux, direction);
+                                    fsr_flux_z, track_flux, direction, (FP_PRECISION) sin_theta);
 
     /* Accumulate contribution of segments to scalar flux before changing fsr */
     if (s > 0 && fsr_id != (&segments[s-1])->_region_id) {

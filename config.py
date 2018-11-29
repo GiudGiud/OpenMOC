@@ -297,24 +297,28 @@ class configuration:
 
   macros['gcc']['single']= [('FP_PRECISION', 'float'),
                             ('CMFD_PRECISION', 'double'),
+                            ('LINALG_TOL', '1E-15'),
                             ('GCC', None),
                             ('VEC_LENGTH', vector_length),
                             ('VEC_ALIGNMENT', vector_alignment)]
 
   macros['mpicc']['single']= [('FP_PRECISION', 'float'),
-                            ('CMFD_PRECISION', 'double'),
-                            ('MPICC', None),
-                            ('VEC_LENGTH', vector_length),
-                            ('VEC_ALIGNMENT', vector_alignment)]
+                              ('CMFD_PRECISION', 'double'),
+                              ('LINALG_TOL', '1E-15'),
+                              ('MPICC', None),
+                              ('VEC_LENGTH', vector_length),
+                              ('VEC_ALIGNMENT', vector_alignment)]
 
   macros['clang']['single']= [('FP_PRECISION', 'float'),
                               ('CMFD_PRECISION', 'double'),
+                              ('LINALG_TOL', '1E-15'),
                               ('CLANG', None),
                               ('VEC_LENGTH', vector_length),
                               ('VEC_ALIGNMENT', vector_alignment)]
 
   macros['icpc']['single']= [('FP_PRECISION', 'float'),
                              ('CMFD_PRECISION', 'double'),
+                             ('LINALG_TOL', '1E-15'),
                              ('ICPC', None),
                              ('MKL_ILP64', None),
                              ('VEC_LENGTH', vector_length),
@@ -322,6 +326,7 @@ class configuration:
 
   macros['bgxlc']['single'] = [('FP_PRECISION', 'float'),
                                ('CMFD_PRECISION', 'double'),
+                               ('LINALG_TOL', '1E-15'),
                                ('BGXLC', None),
                                ('VEC_LENGTH', vector_length),
                                ('VEC_ALIGNMENT', vector_alignment),
@@ -329,6 +334,7 @@ class configuration:
 
   macros['nvcc']['single'] = [('FP_PRECISION', 'float'),
                               ('CMFD_PRECISION', 'double'),
+                              ('LINALG_TOL', '1E-15'),
                               ('NVCC', None),
                               ('CCACHE_CC', 'nvcc')]
 
@@ -340,18 +346,21 @@ class configuration:
 
   macros['mpicc']['double'] = [('FP_PRECISION', 'double'),
                                ('CMFD_PRECISION', 'double'),
+                               ('LINALG_TOL', '1E-15'),
                                ('MPICC', None),
                                ('VEC_LENGTH', vector_length),
                                ('VEC_ALIGNMENT', vector_alignment)]
 
   macros['clang']['double'] = [('FP_PRECISION', 'double'),
                                ('CMFD_PRECISION', 'double'),
+                               ('LINALG_TOL', '1E-15'),
                                ('CLANG', None),
                                ('VEC_LENGTH', vector_length),
                                ('VEC_ALIGNMENT', vector_alignment)]
 
   macros['icpc']['double'] = [('FP_PRECISION', 'double'),
                               ('CMFD_PRECISION', 'double'),
+                              ('LINALG_TOL', '1E-15'),
                               ('ICPC', None),
                               ('MKL_ILP64', None),
                               ('VEC_LENGTH', vector_length),
@@ -359,6 +368,7 @@ class configuration:
 
   macros['bgxlc']['double'] = [('FP_PRECISION', 'double'),
                                ('CMFD_PRECISION', 'double'),
+                               ('LINALG_TOL', '1E-15'),
                                ('BGXLC', None),
                                ('VEC_LENGTH', vector_length),
                                ('VEC_ALIGNMENT', vector_alignment),
@@ -366,6 +376,7 @@ class configuration:
 
   macros['nvcc']['double'] = [('FP_PRECISION', 'double'),
                               ('CMFD_PRECISION', 'double'),
+                              ('LINALG_TOL', '1E-15'),
                               ('CCACHE_CC', 'nvcc')]
 
   # define OPENMP and SWIG (for log output)

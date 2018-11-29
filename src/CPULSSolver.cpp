@@ -351,7 +351,7 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
                                     FP_PRECISION* __restrict__ fsr_flux_y,
                                     FP_PRECISION* __restrict__ fsr_flux_z,
                                     float* track_flux,
-                                    FP_PRECISION direction[3]) {
+                                    FP_PRECISION direction[3], FP_PRECISION sin_theta) {
 
   long fsr_id = curr_segment->_region_id;
   FP_PRECISION length = curr_segment->_length;
@@ -370,15 +370,15 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
     FP_PRECISION length_2D = exp_evaluator->convertDistance3Dto2D(length);
 
     // Compute the exponential terms
-    FP_PRECISION exp_F1[_num_groups] __attribute__ ((aligned (VEC_ALIGNMENT)));
-    FP_PRECISION exp_F2[_num_groups] __attribute__ ((aligned (VEC_ALIGNMENT)));
-    FP_PRECISION exp_H[_num_groups] __attribute__ ((aligned (VEC_ALIGNMENT)));
+    FP_PRECISION exp_F1[_num_groups] __attribute__ ((aligned(VEC_ALIGNMENT)));
+    FP_PRECISION exp_F2[_num_groups] __attribute__ ((aligned(VEC_ALIGNMENT)));
+    FP_PRECISION exp_H[_num_groups] __attribute__ ((aligned(VEC_ALIGNMENT)));
 #pragma omp simd aligned(sigma_t, exp_F1, exp_F2, exp_H)
     for (int e=0; e < _num_groups; e++) {
       FP_PRECISION tau = sigma_t[e] * length_2D;
       exp_evaluator->retrieveExponentialComponents(tau, 0, &exp_F1[e],
                                                    &exp_F2[e],
-                                                   &exp_H[e]);
+                                                   &exp_H[e], sin_theta);
     }
 
     // Compute the sources
@@ -437,12 +437,12 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
         exp_evaluator->retrieveExponentialComponents(tau, p, 
                                                      &exp_F1[p*_num_groups+e],
                                                      &exp_F2[p*_num_groups+e],
-                                                     &exp_H[p*_num_groups+e]);
+                                                     &exp_H[p*_num_groups+e], sin_theta);
       }
     }
 
     /* Compute flat part of source */
-    FP_PRECISION src_flat[_num_groups] __attribute__ ((aligned (VEC_ALIGNMENT)));
+    FP_PRECISION src_flat[_num_groups] __attribute__ ((aligned(VEC_ALIGNMENT)));
 #pragma omp simd aligned(src_flat)
     for (int e=0; e < _num_groups; e++) {
       src_flat[e] = _reduced_sources(fsr_id, e);
@@ -451,21 +451,24 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
     }
 
     /* Compute linear part of source */
-    FP_PRECISION src_linear[num_polar_2 * _num_groups] = {0.0};
-    for (int p=0; p < num_polar_2; p++) {
-      FP_PRECISION sin_theta = _quad->getSinTheta(azim_index, p);
-#pragma omp simd
-      for (int e=0; e < _num_groups; e++) {
-        for (int i=0; i<2; i++)
-          src_linear[p*_num_groups+e] += direction[i] * sin_theta *
-              _reduced_sources_xyz(fsr_id, e, i);
-      }
+    FP_PRECISION sin_the[num_polar_2 * _num_groups] __attribute__ ((aligned(VEC_ALIGNMENT)));
+#pragma omp simd aligned(sin_the)
+    for (int pe=0; pe < num_polar_2 * _num_groups; pe++) {
+      sin_the[pe] = _quad->getSinTheta(azim_index, p);
+
+    FP_PRECISION src_linear[num_polar_2 * _num_groups] __attribute__ ((aligned(VEC_ALIGNMENT)));
+#pragma omp simd aligned(src_linear)
+    for (int pe=0; pe < num_polar_2 * _num_groups; pe++) {
+      src_linear[pe] = direction[0] * sin_theta[pe] *
+            _reduced_sources_xyz(fsr_id, int(pe/_num_polar_2), 0);  //FIXME made a choice
+      src_linear[pe] += direction[1] * sin_the[pe] *
+            _reduced_sources_xyz(fsr_id, int(pe/_num_polar_2), 1);
     }
 
     /* Compute attenuation and tally flux */
     for (int p=0; p < num_polar_2; p++) {
       FP_PRECISION wgt = _quad->getWeightInline(azim_index, p);
-#pragma omp simd aligned(sigma_t, fsr_flux, fsr_flux_x, fsr_flux_y)
+#pragma omp simd aligned(sigma_t, src_flat, src_linear, fsr_flux, fsr_flux_x, fsr_flux_y)
       for (int e=0; e < _num_groups; e++) {
         FP_PRECISION tau = sigma_t[e] * length;
         exp_H[p*_num_groups+e] *=  tau * length * track_flux[p*_num_groups+e];

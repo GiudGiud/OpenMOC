@@ -107,7 +107,7 @@ public:
   void retrieveExponentialComponents(FP_PRECISION tau, int polar_offset,
                                      FP_PRECISION* exp_F1,
                                      FP_PRECISION* exp_F2,
-                                     FP_PRECISION* exp_H);
+                                     FP_PRECISION* exp_H, FP_PRECISION sin_theta);
 
   FP_PRECISION computeExponentialG2(FP_PRECISION tau);
   ExpEvaluator* deepCopy();
@@ -309,10 +309,14 @@ inline FP_PRECISION ExpEvaluator::computeExponentialH(int index,
  */
 inline void ExpEvaluator::retrieveExponentialComponents(FP_PRECISION tau,
                                                         int polar_offset,
-                                                        FP_PRECISION* exp_F1,
-                                                        FP_PRECISION* exp_F2,
-                                                        FP_PRECISION* exp_H) {
-  //if (_interpolate) {
+                                                        FP_PRECISION* __restrict__ exp_F1,
+                                                        FP_PRECISION* __restrict__ exp_F2,
+                                                        FP_PRECISION* __restrict__ exp_H, FP_PRECISION sin_theta) {
+
+  //__builtin_assume_aligned(exp_F1, VEC_ALIGNMENT);
+  //__builtin_assume_aligned(exp_F2, VEC_ALIGNMENT);
+  //__builtin_assume_aligned(exp_H, VEC_ALIGNMENT);
+  if (_interpolate) {
 
     __builtin_assume_aligned(_exp_table, VEC_ALIGNMENT);
 
@@ -327,12 +331,37 @@ inline void ExpEvaluator::retrieveExponentialComponents(FP_PRECISION tau,
         //_exp_table[full_index + 5] * dt2;
     *exp_H = _exp_table[full_index + 4] + _exp_table[full_index + 5] * dt;
         //_exp_table[full_index + 8] * dt2;
-  //}
+  }
   //else {
-  //  int polar_index = _polar_index + polar_offset;
-  //  FP_PRECISION inv_sin_theta = 1.0 / _quadrature->getSinTheta(_azim_index,
+    //int polar_index = _polar_index + polar_offset;
+    //FP_PRECISION inv_sin_theta = 1.0 / _quadrature->getSinTheta(_azim_index,
   //                                                              polar_index);
-  //  FP_PRECISION tau_m = tau * inv_sin_theta;
+    //FP_PRECISION inv_sin_theta = 1.f / sin_theta;
+    //FP_PRECISION tau_m = tau * inv_sin_theta;
+
+    //*exp_F1 = std::min(inv_sin_theta, std::max(0.f, (((-2.25721699e-04f*tau_m + 2.34010169e-02f) * tau_m + 4.95412490e-02f) * tau_m +  1.00002163e+00f) / 
+  //(((1.65532501e-02f*tau_m + 1.30626223e-01f) * tau_m + 5.49851751e-01f) * tau_m + 1.0f)));
+
+    //*exp_F1 = std::min(inv_sin_theta, (1.0f - fastexp(-tau_m)) / tau);
+    //*exp_F1 = (1.0f - std::max(0.f, fastExp3(- tau_m))) / tau;
+
+    //*exp_F2 = (tau_m - 2.0f + xp * (2.0f + tau_m)) / tau / tau;
+    //*exp_F2 = 2.0f / tau * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1;
+    //*exp_F2 = std::min(100.f, 2.0f / tau * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1);
+
+    //*exp_H = std::min(0.5f * inv_sin_theta + tau * -1.0f * inv_sin_theta                   
+    //           * inv_sin_theta / 3.0f, (1.0f - xp * (1.f + tau_m)) / (tau * tau_m));      // bounded form w/ exponential
+    //*exp_H = std::min(0.5f * inv_sin_theta + tau * -1.0f / 3.0f * inv_sin_theta           // bounded form w/ expF1
+    //         * inv_sin_theta, -1.0f / tau + (1.0f + 1.0f / tau_m) * *exp_F1);
+    //*exp_H = -1.0f / tau * (1.0f - *exp_F1/inv_sin_theta) + *exp_F1;                           // safer form ?
+
+
+     //if (tau < 0.01) {
+     //  *exp_F1 = inv_sin_theta;
+     //  *exp_F2 = inv_sin_theta * inv_sin_theta * inv_sin_theta / 6 * tau;
+     //  *exp_H = 0.5 * inv_sin_theta + tau * -1.0 * inv_sin_theta * inv_sin_theta / 3.0;
+     //}
+
   //  int exp_index = getExponentialIndex(tau);
   //  FP_PRECISION dt = getDifference(exp_index, tau);
   //  FP_PRECISION dt2 = dt * dt;
