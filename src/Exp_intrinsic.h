@@ -3,6 +3,140 @@
 #include <math.h>
 /*    gcc -O3 -m64 -Wall -mavx2 -march=broadwell  expc.c -lm     */
 
+/**
+ * @brief Evaluates the function 1 - exp(tau) for tau negative.  Vectorises well.
+ *        Accurate to 6.18 digits (single precision) for entire domain (including
+ *        near zero, unlike intrinsic)
+ *
+ *        Valid for tau ~= [-1.5e6, 0]
+ * @param tau input
+ * @param expv output
+ * @param length length of vector
+ */
+inline void cram7(float x, float expv) {
+
+  /* Generated in Mathematica, accurate to 6.18 digits (single precision), tau [-1.5e6,0] */
+  float c1n = -1.00000014302666667201396424463;
+  float c2n = 0.234841040052684510704433796447;
+  float c3n = -0.0624785939603762121316592924635;
+  float c4n = 0.0100434102711342948752684759736;
+  float c5n = -0.00135724435934263932676353754751;
+  float c6n = 0.0000951474224366003625378414851577;
+  float c7n = -0.0000160076055315534285575266516209;
+
+  float c0d = 1;
+  float c1d = -0.734847118148952339633322706422;
+  float c2d = 0.263193362386411901729092564316;
+  float c3d = -0.0609467155163113059870970359654;
+  float c4d = 0.0100863490579686697359577926719;
+  float c5d = -0.00135667018708833025497446407598; 
+  float c6d = 0.0000951502816434275317085698085885;
+  float c7d = -0.0000160076032420105715765981718742;
+
+  float num, den;
+
+    den = c7d;
+    den = den * x + c6d;
+    den = den * x + c5d;
+    den = den * x + c4d;
+    den = den * x + c3d;
+    den = den * x + c2d;
+    den = den * x + c1d;
+    den = den * x + c0d;
+
+    num = c7n;
+    num = num * x + c6n;
+    num = num * x + c5n;
+    num = num * x + c4n;
+    num = num * x + c3n;
+    num = num * x + c2n;
+    num = num * x + c1n;
+    num = num * x;
+
+    expv = 1.f - num / den;
+}
+
+/**
+ * @brief Based on: https://codingforspeed.com/using-faster-exponential-approximation/
+ *        with the added knowledge that increasing polynomial order scales faster than
+ *        squaring.
+ *
+ *        Valid for inputs tau ~= [-81, 0] in single precision.
+ * @param tau input
+ * @param expv output
+ * @param length length of vector
+ */
+inline void newlimit(float x, float expv) {
+
+  /* Generated in Mathematica, approximates (e^x)^(1/32) */
+  float c0 = 1.0;
+  float c1 = 0.031249996853940119553;
+  float c2 = 0.00048827111506219862388;
+  float c3 = 5.0775354594032959870e-6;
+  float c4 = 3.7119438192380573565e-8;
+
+  float val;
+
+    val = c4;
+    val = val * x + c3;
+    val = val * x + c2;
+    val = val * x + c1;
+    val = val * x + c0;
+
+    val *= val;
+    val *= val;
+    val *= val;
+    val *= val;
+    val *= val;
+
+    expv = val;
+}
+
+/**
+ * @brief https://codingforspeed.com/using-faster-exponential-approximation/
+ *
+ *        Valid for inputs tau ~= [-8125, 0] in single precision.
+ * @param tau input
+ * @param expv output
+ * @param length length of vector
+ */
+inline void limit(float x, float expv) {
+  float c0 = 1.0;
+  float c1 = 0.000244140625;
+  float val;
+
+    val = c1 * x + c0;
+
+    val *= val;
+    val *= val;
+    val *= val;
+    val *= val;
+    
+    val *= val;
+    val *= val;
+    val *= val;
+    val *= val;
+    
+    val *= val;
+    val *= val;
+    val *= val;
+    val *= val;
+
+    expv = val;
+}
+
+/**
+ * @brief Built-in function
+ * @param tau input
+ * @param expv output
+ * @param length length of vector
+ */
+inline void exp_real(float x, float expv, int length) {
+  
+    expv = exp(x);
+}
+
+
 inline void exp256_ps(float x1, float exp) {
 /* Modified code from this source: https://github.com/reyoung/avx_mathfun
 

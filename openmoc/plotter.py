@@ -119,8 +119,21 @@ def plot_tracks(track_generator, get_figure=False, plot_3D=False):
     z = coords[2::vals_per_track//2]
 
     # Make figure of line segments for each Track
-    fig = plt.figure()
-    fig.patch.set_facecolor('none')
+    #fig = plt.figure()
+    #fig.patch.set_facecolor('none')
+    colors = ['b-', 'r-.', 'k:', 'g--']
+    #shapes = ['.', '-', 'x', '+', 'o']
+
+    lines = [('solid',               (0, ())),
+     ('densely dotted',      (0, (1, 1))),
+     ('dashed',              (0, (5, 5))),
+     ('densely dashed',      (0, (5, 1))),
+     ('densely dashdotted',  (0, (3, 1, 1, 1))),
+     ('loosely dashdotdotted', (0, (3, 10, 1, 10, 1, 10))),
+     ('dashdotdotted',         (0, (3, 5, 1, 5, 1, 5))),
+     ('densely dashdotdotted', (0, (3, 1, 1, 1, 1, 1)))]
+    print(lines[0])
+
     if plot_3D:
         ax = fig.gca(projection = '3d')
         for i in range(num_tracks):
@@ -128,8 +141,8 @@ def plot_tracks(track_generator, get_figure=False, plot_3D=False):
         if z.min() != z.max():
           ax.set_zlim(z.min(), z.max())
     else:
-        for i in range(num_tracks):
-            plt.plot(x[i*2:(i+1)*2], y[i*2:(i+1)*2], 'b-')
+        for i in range(num_tracks // 2):  #plot first half of tracks
+            plt.plot(x[i*2:(i+1)*2], y[i*2:(i+1)*2], colors[i%4], linewidth=2.0)
 
     plt.xlim([x.min(), x.max()])
     plt.ylim([y.min(), y.max()])
@@ -150,8 +163,9 @@ def plot_tracks(track_generator, get_figure=False, plot_3D=False):
             filename = \
                 'tracks-{1}-angles-{2}.png'.format(directory, num_azim,
                                                    spacing)
-            fig.savefig(directory+filename, bbox_inches='tight')
-            plt.close(fig)
+            #fig.savefig(directory+filename, bbox_inches='tight')
+            plt.savefig(directory+filename)
+            #plt.close(fig)
 
     del coords
 
@@ -234,7 +248,7 @@ def plot_segments(track_generator, get_figure=False, plot_3D=False):
     numpy.random.shuffle(color_map)
 
     # Make figure of line segments for each track
-    fig = plt.figure()
+    #fig = plt.figure()
     fig.patch.set_facecolor('none')
 
     # Create a color map corresponding to FSR IDs
@@ -610,19 +624,6 @@ def plot_flat_source_regions(geometry, gridsize=250, xlim=None, ylim=None,
                 plt.scatter(centroids[:,0], centroids[:,1], color='k',
                             marker=marker_type, s=marker_size)
 
-        # Return the figure to the user if requested
-        if get_figure:
-            return figures[0]
-        # Set the plot title and save the figure
-        else:
-            plot_filename = directory + plot_params.filename + \
-                plot_params.extension
-
-            if library == 'pil':
-                fig.save(plot_filename)
-            else:
-                fig.savefig(plot_filename, bbox_inches='tight')
-                plt.close(fig)
 
 
 def plot_cmfd_cells(geometry, cmfd, gridsize=250, xlim=None, ylim=None,
@@ -1313,7 +1314,7 @@ def plot_spatial_data(domains_to_data, plot_params, get_figure=False):
             plt.imshow(np.flipud(surface), extent=coords['bounds'],
                        interpolation=plot_params.interpolation,
                        vmin=plot_params.vmin, vmax=plot_params.vmax,
-                       cmap=plot_params.cmap)
+                       cmap=plot_params.cmap, alpha=0.4)
 
             if plot_params.colorbar:
                 plt.colorbar()
