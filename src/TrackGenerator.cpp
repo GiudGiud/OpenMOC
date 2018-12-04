@@ -336,11 +336,11 @@ FP_PRECISION* TrackGenerator::getFSRVolumes() {
   /* Check to ensure all FSRs are crossed by at least one track */
   for (long i=0; i < num_FSRs; i++) {
     if (fabs(_FSR_volumes[i]) < FLT_EPSILON) {
-      log_printf(ERROR, "Zero volume calculated for FSR %d, point (%f, %f, %f)",
+      log_printf(WARNING, "Zero volume calculated for FSR %d, point (%f, %f, %f)",
                  i, _geometry->getFSRPoint(i)->getX(),
                  _geometry->getFSRPoint(i)->getY(),
                  _geometry->getFSRPoint(i)->getZ());
-      log_printf(ERROR, "Zero volume calculated in an FSR region since no "
+      log_printf(WARNING, "Zero volume calculated in an FSR region since no "
                "track traversed the FSR. Use a finer track laydown to ensure "
                "every FSR is traversed.");
     }

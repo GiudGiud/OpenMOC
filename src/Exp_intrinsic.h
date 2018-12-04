@@ -13,7 +13,7 @@
  * @param expv output
  * @param length length of vector
  */
-inline void cram7(float x, float expv) {
+inline void cram7(float x, float* expv) {
 
   /* Generated in Mathematica, accurate to 6.18 digits (single precision), tau [-1.5e6,0] */
   float c1n = -1.00000014302666667201396424463;
@@ -53,7 +53,7 @@ inline void cram7(float x, float expv) {
     num = num * x + c1n;
     num = num * x;
 
-    expv = 1.f - num / den;
+    *expv = 1.f - num / den;
 }
 
 /**
@@ -66,7 +66,7 @@ inline void cram7(float x, float expv) {
  * @param expv output
  * @param length length of vector
  */
-inline void newlimit(float x, float expv) {
+inline void newlimit(float x, float* expv) {
 
   /* Generated in Mathematica, approximates (e^x)^(1/32) */
   float c0 = 1.0;
@@ -89,7 +89,7 @@ inline void newlimit(float x, float expv) {
     val *= val;
     val *= val;
 
-    expv = val;
+    *expv = val;
 }
 
 /**
@@ -100,7 +100,7 @@ inline void newlimit(float x, float expv) {
  * @param expv output
  * @param length length of vector
  */
-inline void limit(float x, float expv) {
+inline void limit(float x, float* expv) {
   float c0 = 1.0;
   float c1 = 0.000244140625;
   float val;
@@ -122,7 +122,7 @@ inline void limit(float x, float expv) {
     val *= val;
     val *= val;
 
-    expv = val;
+    *expv = val;
 }
 
 /**
@@ -131,13 +131,13 @@ inline void limit(float x, float expv) {
  * @param expv output
  * @param length length of vector
  */
-inline void exp_real(float x, float expv, int length) {
+inline void exp_real(float x, float* expv, int length) {
   
-    expv = exp(x);
+    *expv = exp(x);
 }
 
 
-inline void exp256_ps(float x1, float exp) {
+inline void exp256_ps(float x1, float* exp) {
 /* Modified code from this source: https://github.com/reyoung/avx_mathfun
 
    AVX implementation of exp
@@ -220,7 +220,7 @@ __m256  y      = cephes_exp_p0;
         imm0   = _mm256_slli_epi32(imm0, 23);
 __m256  pow2n  = _mm256_castsi256_ps(imm0);
         y      = _mm256_mul_ps(y, pow2n);
-        _mm256_store_ps(&exp, y);
+        _mm256_store_ps(exp, y);
 }
 
 #include <stdio.h>
