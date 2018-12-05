@@ -339,10 +339,10 @@ inline void ExpEvaluator::retrieveExponentialComponents(FP_PRECISION tau,
   //                                                              polar_index);
     FP_PRECISION inv_sin_theta = 1.f / sin_theta;
     FP_PRECISION tau_m = tau * inv_sin_theta;
-    FP_PRECISION xp;// = exp(-tau_m);
-    //exp256_ps(-tau_m, xp);
-    newlimit(-tau_m, &xp);
-    //cram7(-tau_m, &xp);
+    FP_PRECISION xp;// = fastexp(-tau_m);
+    //exp256_ps(-tau_m, &xp);
+    //newlimit(-tau_m, &xp);
+    cram7(-tau_m, &xp);
 
     //*exp_F1 = std::min(inv_sin_theta, std::max(0.f, (((-2.25721699e-04f*tau_m + 2.34010169e-02f) * tau_m + 4.95412490e-02f) * tau_m +  1.00002163e+00f) / 
   //(((1.65532501e-02f*tau_m + 1.30626223e-01f) * tau_m + 5.49851751e-01f) * tau_m + 1.0f)));

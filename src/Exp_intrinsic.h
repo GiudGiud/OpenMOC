@@ -250,6 +250,7 @@ inline float fastExp4(register float x)  // quartic spline approximation
     return reinterpreter.f;
 }
 
+// http://www.machinedlearnings.com/2011/06/fast-approximate-logarithm-exponential.html
 /*=====================================================================*
  *                   Copyright (C) 2011 Paul Mineiro                   *
  * All rights reserved.                                                *
