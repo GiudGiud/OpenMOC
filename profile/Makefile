@@ -93,7 +93,7 @@ non-uniform-lattice/non-uniform-lattice.cpp \
 # Sets Flags
 #===============================================================================
 
-CFLAGS = -std=gnu++0x #-fprofile-use -fprofile-correction -fprofile-dir="./pgo"
+CFLAGS = -std=gnu++0x -DONLYVACUUMBC
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)

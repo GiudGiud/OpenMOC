@@ -401,9 +401,9 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
       FP_PRECISION tau = sigma_t[e] * length_2D;
 
       // Compute the change in flux across the segment
-      exp_H[e] *= length * track_flux[e] * tau * wgt;
+      exp_H[e] *= length * track_flux[e] * wgt * tau;
       FP_PRECISION delta_psi = (tau * track_flux[e] - length_2D * src_flat[e]) *
-          exp_F1[e] - src_linear[e] * length_2D * length_2D *
+          exp_F1[e] - src_linear[e] * tau * length_2D *
           exp_F2[e];
       track_flux[e] -= delta_psi;
       delta_psi *= wgt;

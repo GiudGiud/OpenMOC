@@ -53,7 +53,7 @@ inline void cram7(float x, float* expv) {
     num = num * x + c1n;
     num = num * x;
 
-    *expv = 1.f - num / den;
+    *expv = num / den;
 }
 
 /**

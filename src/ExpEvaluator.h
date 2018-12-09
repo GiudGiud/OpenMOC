@@ -321,12 +321,6 @@ inline void ExpEvaluator::retrieveExponentialComponents(FP_PRECISION tau,
 
   //  __builtin_assume_aligned(_exp_table, VEC_ALIGNMENT);
 
-//    int exp_index = getExponentialIndex(tau);
-  //  FP_PRECISION dt = getDifference(exp_index, tau);
-    //FP_PRECISION dt2 = dt * dt;
-    //int full_index = (exp_index * _num_polar_terms + polar_offset)
-    //  * _num_exp_terms;
-    //*exp_F1 = _exp_table[full_index] + _exp_table[full_index + 1] * dt;
         //_exp_table[full_index + 2] * dt2;
     //*exp_F2 = _exp_table[full_index + 2] + _exp_table[full_index + 3] * dt;
         //_exp_table[full_index + 5] * dt2;
@@ -337,16 +331,142 @@ inline void ExpEvaluator::retrieveExponentialComponents(FP_PRECISION tau,
     //int polar_index = _polar_index + polar_offset;
     //FP_PRECISION inv_sin_theta = 1.0 / _quadrature->getSinTheta(_azim_index,
   //                                                              polar_index);
+
+
+
+    //tau = std::max(tau, 1e-5f);
+
+
     FP_PRECISION inv_sin_theta = 1.f / sin_theta;
     FP_PRECISION tau_m = tau * inv_sin_theta;
     FP_PRECISION xp;// = fastexp(-tau_m);
+
     //exp256_ps(-tau_m, &xp);
     //newlimit(-tau_m, &xp);
+
+    //int tid = omp_get_thread_num();
+    if (false) {//tid == 0) {
+
+    log_printf(NORMAL, "CRAM7 %.10f", inv_sin_theta);
+    for (int i=8; i>-1; i--) {
+      for (int j=1; j<10; j++) {
+        tau = j * std::pow(10, -i);
+        tau = std::max(tau, 1e-4f);
+        tau_m = tau * inv_sin_theta;
+        cram7(-tau_m, &xp);
+        *exp_F1 = xp / tau;
+        //*exp_F2 = (tau_m - 2.0f + xp * (2.0f + tau_m)) / (tau * tau);
+        //*exp_H =  (1.0f - xp * (1.f + tau_m)) / (tau * tau_m);
+        //*exp_F2 = -(*exp_F1)*(2.f + inv_sin_theta*tau) + 2.0f * inv_sin_theta;
+        //*exp_H = *exp_F1 * (tau + 1.0f/inv_sin_theta) - 1.0f;
+        //*exp_F2 = 2.0f / tau * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1;
+        //*exp_H = -1.0f / tau * (1.0f - *exp_F1/inv_sin_theta) + *exp_F1;
+        *exp_F2 = 2.0f * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1 * tau;
+        *exp_H = -1.0f * (1.0f - *exp_F1/inv_sin_theta) + *exp_F1 * tau;
+        log_printf(NORMAL, "%.15f, %.15f, %.15f,", *exp_F1, *exp_F2, *exp_H);
+      }
+    }
+
+    log_printf(NORMAL, "CRAM7 bounded");
+    for (int i=8; i>-1; i--) {
+      for (int j=1; j<10; j++) {
+        tau = j * std::pow(10, -i);
+        tau = std::max(tau, 1e-4f);
+        tau_m = tau * inv_sin_theta;
+        cram7(-tau_m, &xp);
+        *exp_F1 = xp / tau;
+        //*exp_F2 = (tau_m - 2.0f + xp * (2.0f + tau_m)) / (tau * tau);
+        //*exp_H =  (1.0f - xp * (1.f + tau_m)) / (tau * tau_m);
+        //*exp_F2 = -(*exp_F1)*(2.f/tau + inv_sin_theta) + 2.0f/tau * inv_sin_theta;
+        //*exp_H = *exp_F1 * ( 1.0f + 1.0f/tau/inv_sin_theta) - 1.0f / tau;
+        //*exp_F2 = 2.0f / tau * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1;
+        //*exp_H = -1.0f / tau * (1.0f - *exp_F1/inv_sin_theta) + *exp_F1;
+        *exp_F2 = std::max(0.f, 2.0f * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1 * tau);
+        *exp_H = -(1.0f - *exp_F1/inv_sin_theta) + *exp_F1 * tau;
+        log_printf(NORMAL, "%.15f, %.15f, %.15f,", *exp_F1, *exp_F2, *exp_H);
+      }
+    }
+
+    log_printf(NORMAL, "quad");
+    for (int i=8; i>-1; i--) {
+      for (int j=1; j<10; j++) {
+        tau = j * std::pow(10, -i);
+        tau = std::max(tau, 1e-4f);
+        int exp_index = getExponentialIndex(tau);
+        FP_PRECISION dt = getDifference(exp_index, tau);
+        FP_PRECISION dt2 = dt * dt;
+        int full_index = (exp_index * _num_polar_terms + polar_offset)
+           * _num_exp_terms;
+        *exp_F1 = _exp_table[full_index] + _exp_table[full_index + 1] * dt //;
+                  + _exp_table[full_index + 2] * dt2;
+        *exp_F2 = _exp_table[full_index+3] + _exp_table[full_index + 4] * dt  //;
+                  + _exp_table[full_index + 5] * dt2;
+        *exp_H  = _exp_table[full_index+6] + _exp_table[full_index + 7] * dt;
+                  + _exp_table[full_index + 8] * dt2;
+        log_printf(NORMAL, "%.15f, %.15f, %.15f,", *exp_F1, *exp_F2 * tau, *exp_H * tau);
+      }
+    }
+
+    log_printf(NORMAL, "exp");
+    for (int i=8; i>-1; i--) {
+      for (int j=1; j<10; j++) {
+        tau = j * std::pow(10, -i);
+        tau = std::max(tau, 1e-4f);
+        tau_m = tau * inv_sin_theta;
+        xp = exp(-tau * inv_sin_theta);
+        *exp_F1 = (1.0f - xp) / tau;
+        *exp_F2 = (tau_m - 2.0f + xp * (2.0f + tau_m)) / (tau);
+        *exp_H =  (1.0f - xp * (1.f + tau_m)) / (tau_m);
+        //*exp_F2 = 2.0f / tau * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1;
+        //*exp_H = -1.0f / tau * (1.0f - *exp_F1/inv_sin_theta) + *exp_F1;
+        log_printf(NORMAL, "%.15f, %.15f, %.15f,", *exp_F1, *exp_F2, *exp_H);
+      }
+    }
+
+    log_printf(NORMAL, "m256");
+    for (int i=8; i>-1; i--) {
+      for (int j=1; j<10; j++) {
+        tau = j * std::pow(10, -i);
+        exp256_ps(-tau * inv_sin_theta, &xp);
+        *exp_F1 = (1.0f - xp) / tau;
+        *exp_F2 = 2.0f / tau * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1;
+        *exp_H = -1.0f / tau * (1.0f - *exp_F1/inv_sin_theta) + *exp_F1;
+        log_printf(NORMAL, "%f, %f, %f,", *exp_F1, *exp_F2, *exp_H);
+      }
+    }
+
+    log_printf(NORMAL, "limit");
+    for (int i=8; i>-1; i--) {
+      for (int j=1; j<10; j++) {
+        tau = j * std::pow(10, -i);
+        limit(-tau * inv_sin_theta, &xp);
+        *exp_F1 = (1.0f - xp) / tau;
+        *exp_F2 = 2.0f / tau * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1;
+        *exp_H = -1.0f / tau * (1.0f - *exp_F1/inv_sin_theta) + *exp_F1;
+        log_printf(NORMAL, "%f, %f, %f,", *exp_F1, *exp_F2, *exp_H);
+      }
+    }
+
+    log_printf(NORMAL, "new_limit");
+    for (int i=8; i>-1; i--) {
+      for (int j=1; j<10; j++) {
+        tau = j * std::pow(10, -i);
+        newlimit(-tau * inv_sin_theta, &xp);
+        *exp_F1 = (1.0f - xp) / tau;
+        *exp_F2 = 2.0f / tau * (inv_sin_theta - *exp_F1) - inv_sin_theta * *exp_F1;
+        *exp_H = -1.0f / tau * (1.0f - *exp_F1/inv_sin_theta) + *exp_F1;
+        log_printf(NORMAL, "%f, %f, %f,", *exp_F1, *exp_F2, *exp_H);
+      }
+    }
+
+    abort();
+    }
+
     cram7(-tau_m, &xp);
 
     //*exp_F1 = std::min(inv_sin_theta, std::max(0.f, (((-2.25721699e-04f*tau_m + 2.34010169e-02f) * tau_m + 4.95412490e-02f) * tau_m +  1.00002163e+00f) / 
   //(((1.65532501e-02f*tau_m + 1.30626223e-01f) * tau_m + 5.49851751e-01f) * tau_m + 1.0f)));
-    *exp_F1 = (1.0f - xp) / tau;
+    *exp_F1 = (xp) / tau;
     //*exp_F1 = std::min(inv_sin_theta, (1.0f - xp) / tau);
     //*exp_F1 = std::max(0.f, std::min(inv_sin_theta, (1.0f - xp) / tau));
     //*exp_F1 = std::min(inv_sin_theta, (1.0f - fastexp(-tau_m)) / tau);
