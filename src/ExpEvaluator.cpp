@@ -15,7 +15,7 @@ ExpEvaluator::ExpEvaluator() {
   _sin_theta_no_offset = 0.0;
   _inverse_sin_theta_no_offset = 0.0;
   _linear_source = false;
-  _num_exp_terms = 2;
+  _num_exp_terms = 3;
   _azim_index = 0;
   _polar_index = 0;
   _num_polar_terms = 0;

@@ -87,7 +87,7 @@ class configuration:
 
   # The vector alignment used in the VectorizedSolver class when allocating
   # aligned data structures using MM_MALLOC and MM_FREE
-  vector_alignment = 16
+  vector_alignment = 32
 
   # List of C/C++/CUDA distutils.extension objects which are created based
   # on which flags are specified at compile time.
@@ -161,7 +161,7 @@ class configuration:
   compiler_flags = dict()
 
   compiler_flags['gcc'] = ['-c', '-O3', '-ffast-math', '-fopenmp',
-                           '-std=c++11', '-fpic']
+                           '-std=c++11', '-fpic', '-DNGROUPS=70', '-DLS', '-march=native']
   compiler_flags['mpicc'] = ['-c', '-O3', '-ffast-math', '-fopenmp',
                            '-std=c++11', '-fpic']
   compiler_flags['clang'] = ['-c', '-O3', '-ffast-math', '-std=c++11',

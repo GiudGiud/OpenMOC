@@ -407,24 +407,30 @@ void TrackGenerator::setNumThreads(int num_threads) {
                "be at least MPI_THREAD_SERIALIZED.");
 #endif
 
-  /* Print CPU assignments, useful for NUMA where by-socket is the preferred
-   * CPU grouping */
-  std::vector<int> cpus;
-#pragma omp parallel for
-  for (int i=0; i<num_threads; i++)
-    cpus.push_back(sched_getcpu());
-  sort(cpus.begin(), cpus.end());
-  std::stringstream str_cpus;
-  for (int i=0; i<num_threads; i++)
-      str_cpus << cpus.at(i) << " ";
-  log_printf(INFO, "CPUs on rank 0 process: %s", str_cpus.str());
-
   _num_threads = num_threads;
 
   /* Set the number of threads for OpenMP */
   omp_set_num_threads(_num_threads);
   if (_geometry != NULL)
     _geometry->reserveKeyStrings(num_threads);
+
+  /* Print CPU assignments, useful for NUMA where by-socket is the preferred
+   * CPU grouping */
+  std::vector<int> cpus;
+#pragma omp parallel for schedule(static,1)
+  for (int i=0; i<num_threads; i++) {
+#pragma omp critical
+    {
+      cpus.push_back(sched_getcpu());
+    }
+  }
+
+  sort(cpus.begin(), cpus.end());
+  std::stringstream str_cpus;
+  for (int i=0; i<num_threads; i++)
+      str_cpus << cpus.at(i) << " ";
+  if (num_threads > 1)
+    log_printf(NORMAL, "CPUs on rank 0 process: %s", str_cpus.str().c_str());
 }
 
 

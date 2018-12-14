@@ -334,8 +334,7 @@ inline void ExpEvaluator::retrieveExponentialComponents(FP_PRECISION tau,
 
 
 
-    //tau = std::max(tau, 1e-5f);
-
+    tau = std::max(tau, 1e-5f);
 
     FP_PRECISION inv_sin_theta = 1.f / sin_theta;
     FP_PRECISION tau_m = tau * inv_sin_theta;
