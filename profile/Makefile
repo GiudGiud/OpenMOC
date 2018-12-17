@@ -2,13 +2,13 @@
 # User Options
 #===============================================================================
 
-COMPILER    	 ?= mpi
-OPENMP      	 ?= yes
-OPTIMIZE    	 ?= yes
-DEBUG       	 ?= no
-PROFILE     	 ?= no
+COMPILER       ?= mpi
+OPENMP         ?= yes
+OPTIMIZE       ?= yes
+DEBUG          ?= no
+PROFILE        ?= no
 INFO           ?= no
-PRECISION   	 ?= single
+PRECISION      ?= single
 CMFD_PRECISION ?= single
 
 #===============================================================================

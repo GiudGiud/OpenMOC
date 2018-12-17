@@ -77,6 +77,9 @@ protected:
   /* Vector of vectors containing boundary track ids and direction */
   std::vector<std::vector<long> > _boundary_tracks;
 
+  /* Vector to know how long of a send buffer to send to another domain */
+  std::vector<int> _buffer_size;
+
 #ifdef ONLYVACUUMBC
   /* Vector of the vacuum boundary track ids and direction */
   std::vector<long> _tracks_from_vacuum;
