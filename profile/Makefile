@@ -29,7 +29,8 @@ CMFD_PRECISION ?= single
 #case = models/homogeneous/homogeneous.cpp
 #case = models/non-uniform-lattice/non-uniform-lattice.cpp
 #case ?= models/run_time_standard/run_time_standard.cpp
-case = models/assembly_3/load-assembly.cpp
+case = models/core_6/load-core.cpp
+#case = models/assembly_1/load-assembly.cpp
 
 source = \
 Cell.cpp \
@@ -137,7 +138,7 @@ endif
 
 # Debug Flags
 ifeq ($(DEBUG),yes)
-  CFLAGS += -O0
+  #CFLAGS += -O0
   CFLAGS += -g
 endif
 

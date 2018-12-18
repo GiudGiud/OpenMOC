@@ -1118,7 +1118,8 @@ void Cmfd::constructMatrices(int moc_iteration) {
         /* Scattering gain from all groups */
         for (int g = 0; g < _num_cmfd_groups; g++) {
           value = - material->getSigmaSByGroup(g+1, e+1) * volume;
-          _A->incrementValue(i, g, i, e, value);
+          if (std::abs(value) > FLT_EPSILON)
+            _A->incrementValue(i, g, i, e, value);
         }
 
         /* Streaming to neighboring cells */
@@ -1167,7 +1168,8 @@ void Cmfd::constructMatrices(int moc_iteration) {
         for (int g = 0; g < _num_cmfd_groups; g++) {
           value = material->getChiByGroup(e+1)
               * material->getNuSigmaFByGroup(g+1) * volume;
-          _M->incrementValue(i, g, i, e, value);
+          if (std::abs(value)>FLT_EPSILON)
+            _M->incrementValue(i, g, i, e, value);
         }
       }
     }

@@ -342,7 +342,7 @@ void CPUSolver::initializeSourceArrays() {
   memset(_fixed_sources, 0.0, sizeof(FP_PRECISION) * size);
 
   /* Populate fixed source array with any user-defined sources */
-  initializeFixedSources();
+  //initializeFixedSources();
 }
 
 
