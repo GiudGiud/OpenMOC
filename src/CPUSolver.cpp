@@ -1053,30 +1053,7 @@ void CPUSolver::transferAllInterfaceFluxes() {
     }
 
     /* Block for communication round to complete */
-    bool round_complete = false;
-    while (!round_complete) {
-
-      round_complete = true;
-      int flag;
-
-      /* Check forward and backward send/receive messages */
-      for (int i=0; i < num_domains; i++) {
-
-        /* Wait for send to complete */
-        if (_MPI_sends[i] == true) {
-          MPI_Test(&_MPI_requests[i*2], &flag, &stat);
-          if (flag == 0)
-            round_complete = false;
-        }
-
-        /* Wait for receive to complete */
-        if (_MPI_receives[i] == true) {
-          MPI_Test(&_MPI_requests[i*2+1], &flag, &stat);
-          if (flag == 0)
-            round_complete = false;
-        }
-      }
-    }
+    MPI_Waitall(num_domains, _MPI_requests, MPI_STATUSES_IGNORE);
 
     /* Reset status for next communication round and copy fluxes */
     for (int i=0; i < num_domains; i++) {
