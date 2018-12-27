@@ -2588,8 +2588,6 @@ void Cmfd::generateKNearestStencils() {
     }
   }
 
-
-
   /* Compute axial quadratic interpolation values if requested */
   if (_use_axial_interpolation && _local_num_zn >= 3) {
 

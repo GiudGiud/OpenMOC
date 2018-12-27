@@ -20,6 +20,10 @@
 #ifndef TRACK_TRAVERSING_ALGORITHMS_H_
 #define TRACK_TRAVERSING_ALGORITHMS_H_
 
+#ifdef THREED
+  #define _num_coeffs 6
+#endif
+
 #include "TraverseSegments.h"
 #include "ExpEvaluator.h"
 
@@ -165,7 +169,9 @@ private:
   Quadrature* _quadrature;
   CPULSSolver* _solver;
   int _num_groups;
+#ifndef THREED
   int _num_coeffs;
+#endif
   int _num_flat;
   Point** _starting_points;
   double** _thread_source_constants;

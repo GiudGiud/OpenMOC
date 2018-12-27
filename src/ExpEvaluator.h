@@ -500,5 +500,31 @@ inline void ExpEvaluator::retrieveExponentialComponents(FP_PRECISION tau,
   //}
 }
 
+/**
+ * @brief Computes the G2 exponential term for a optical length and polar angle.
+ * @details This method computes the H exponential term from Ferrer [1]
+ *          for some optical path length and polar angle. This method
+ *          uses either a linear interpolation table (default) or the
+ *          exponential intrinsic exp(...) function.
+ *
+ *            [1] R. Ferrer and J. Rhodes III, "A Linear Source Approximation
+ *                Scheme for the Method of Characteristics", Nuclear Science and
+ *                Engineering, Volume 182, February 2016.
+ *
+ * @param tau the optical path length (e.g., sigma_t times length)
+ * @param polar the polar angle index
+ * @return the evaluated exponential
+ */
+inline FP_PRECISION ExpEvaluator::computeExponentialG2(FP_PRECISION tau) {
+
+  tau = std::max(tau, FP_PRECISION(FLT_EPSILON));
+  FP_PRECISION xp;
+  cram7(-tau, &xp);
+
+  return 2.0f / 3.0f - (1.f + 2.0f / tau)
+      * (1.0f / tau + 0.5f - (1.0f + 1.0f / tau) *
+        (xp) / tau);
+}
+
 
 #endif /* EXPEVALUATOR_H_ */

@@ -29,8 +29,8 @@ CMFD_PRECISION ?= single
 #case = models/homogeneous/homogeneous.cpp
 #case = models/non-uniform-lattice/non-uniform-lattice.cpp
 #case ?= models/run_time_standard/run_time_standard.cpp
-case = models/assembly_3/load-assembly.cpp
-#case = models/core_2/load-core.cpp
+case ?= models/assembly_5/load-assembly.cpp
+#case ?= models/core_444/load-core.cpp
 
 source = \
 Cell.cpp \
@@ -172,23 +172,27 @@ CFLAGS += -DVEC_ALIGNMENT=32
 
 # Optimization Flags
 ifeq ($(OPTIMIZE),yes)
-ifeq ($(COMPILER),gnu)
-  CFLAGS += -O3 -ffast-math -fpic -march=native
-endif
-ifeq ($(COMPILER),mpi)
-  CFLAGS += -O3 -ffast-math -fpic -march=native
-endif
-ifeq ($(COMPILER),intel)
-  CFLAGS += -O3 -xhost -fast -ansi-alias -no-prec-div -ipo
-endif
-ifeq ($(COMPILER),bluegene)
-  CFLAGS += -O3 -ffast-math -fpic
-endif
-ifeq ($(COMPILER),clang)
-  CFLAGS += -O3 -ffast-math -fvectorize -fpic
-endif
-  # Set the number of groups and dimension (3D) at compile time
+  ifeq ($(COMPILER),gnu)
+    CFLAGS += -O3 -ffast-math -fpic -march=native
+  endif
+  ifeq ($(COMPILER),mpi)
+    CFLAGS += -O3 -ffast-math -fpic -march=native
+  endif
+  ifeq ($(COMPILER),intel)
+    CFLAGS += -O3 -xhost -fast -ansi-alias -no-prec-div -ipo
+  endif
+  ifeq ($(COMPILER),bluegene)
+    CFLAGS += -O3 -ffast-math -fpic
+  endif
+  ifeq ($(COMPILER),clang)
+    CFLAGS += -O3 -ffast-math -fvectorize -fpic
+  endif
+  # Set the number of groups at compile time
   CFLAGS += -DNGROUPS=70
+  # Set the source to linear source at compile time
+  CFLAGS += -DLINEARSOURCE
+  # Set the dimension to 3D at compile time
+  CFLAGS += -DTHREED
 endif
 
 # Optimization report flags

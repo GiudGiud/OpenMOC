@@ -135,6 +135,7 @@ void CPULSSolver::initializeFSRs() {
   CPUSolver::initializeFSRs();
 
   /* Initialize constant source components and source expansion matrices */
+  _timer->startTimer();
   initializeLinearSourceConstants();
 
   /* Generate linear source coefficients */
@@ -142,6 +143,8 @@ void CPULSSolver::initializeFSRs() {
   LinearExpansionGenerator lin_src_coeffs(this);
   lin_src_coeffs.execute();
   log_printf(NORMAL, "Linear expansion coefficient generation complete");
+  _timer->stopTimer();
+  _timer->recordSplit("Linear source constant component");
 }
 
 
@@ -554,29 +557,29 @@ void CPULSSolver::addSourceToScalarFlux() {
 
         _scalar_flux_xyz(r,e,0) /= volume;
         _scalar_flux_xyz(r,e,0) += flux_const * _reduced_sources_xyz(r,e,0)
-            * _FSR_source_constants[r*_num_groups*nc + nc*e    ];
+            * _FSR_source_constants[r*_num_groups*nc + e];
         _scalar_flux_xyz(r,e,0) += flux_const * _reduced_sources_xyz(r,e,1)
-            * _FSR_source_constants[r*_num_groups*nc + nc*e + 2];
+            * _FSR_source_constants[r*_num_groups*nc + _num_groups + e];
 
         _scalar_flux_xyz(r,e,1) /= volume;
         _scalar_flux_xyz(r,e,1) += flux_const * _reduced_sources_xyz(r,e,0)
-            * _FSR_source_constants[r*_num_groups*nc + nc*e + 2];
+            * _FSR_source_constants[r*_num_groups*nc + 2*_num_groups + e];
         _scalar_flux_xyz(r,e,1) += flux_const * _reduced_sources_xyz(r,e,1)
-            * _FSR_source_constants[r*_num_groups*nc + nc*e + 1];
+            * _FSR_source_constants[r*_num_groups*nc + _num_groups + e];
 
         if (_solve_3D) {
           _scalar_flux_xyz(r,e,0) += flux_const * _reduced_sources_xyz(r,e,2)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 3];
+              * _FSR_source_constants[r*_num_groups*nc + 3*_num_groups + e];
           _scalar_flux_xyz(r,e,1) += flux_const * _reduced_sources_xyz(r,e,2)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 4];
+              * _FSR_source_constants[r*_num_groups*nc + 4*_num_groups + e];
 
           _scalar_flux_xyz(r,e,2) /= volume;
           _scalar_flux_xyz(r,e,2) += flux_const * _reduced_sources_xyz(r,e,0)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 3];
+              * _FSR_source_constants[r*_num_groups*nc + 3*_num_groups + e];
           _scalar_flux_xyz(r,e,2) += flux_const * _reduced_sources_xyz(r,e,1)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 4];
+              * _FSR_source_constants[r*_num_groups*nc + 4*_num_groups + e];
           _scalar_flux_xyz(r,e,2) += flux_const * _reduced_sources_xyz(r,e,2)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 5];
+              * _FSR_source_constants[r*_num_groups*nc + 5*_num_groups + e];
         }
 
         _scalar_flux_xyz(r,e,0) /= sigma_t[e];

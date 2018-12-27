@@ -453,11 +453,13 @@ LinearExpansionGenerator::LinearExpansionGenerator(CPULSSolver* solver)
   /* Determine the number of linear coefficients */
   _num_flat = 0;
   int num_rows = 1;
+#ifndef THREED
   _num_coeffs = 3;
   if (_track_generator_3D != NULL) {
     num_rows = _track_generator_3D->getMaxNumTracksPerStack();
     _num_coeffs = 6;
   }
+#endif
 
   /* Reset linear source coefficients to zero */
   long size = track_generator->getGeometry()->getNumFSRs() * _num_coeffs;
@@ -468,10 +470,8 @@ LinearExpansionGenerator::LinearExpansionGenerator(CPULSSolver* solver)
   /* Create local thread tallies */
   int num_threads = omp_get_max_threads();
   _starting_points = new Point*[num_threads];
-  _thread_source_constants = new double*[num_threads];
 
   for (int i=0; i < num_threads; i++) {
-    _thread_source_constants[i] = new double[_num_coeffs * _num_groups];
     _starting_points[i] = new Point[num_rows];
   }
 
@@ -487,11 +487,9 @@ LinearExpansionGenerator::LinearExpansionGenerator(CPULSSolver* solver)
  */
 LinearExpansionGenerator::~LinearExpansionGenerator() {
   int num_threads = omp_get_max_threads();
-  for (int i=0; i < num_threads; i++) {
-    delete [] _thread_source_constants[i];
+  for (int i=0; i < num_threads; i++)
     delete [] _starting_points[i];
-  }
-  delete [] _thread_source_constants;
+
   delete [] _starting_points;
   delete [] _src_constants;
   delete [] _lin_exp_coeffs;
@@ -639,10 +637,6 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
   int azim_index = track->getAzimIndex();
   int xy_index = track->getXYIndex();
 
-  /* Use local array accumulator to prevent false sharing */
-  int tid = omp_get_thread_num();
-  double* thread_src_constants = _thread_source_constants[tid];
-
   /* Calculate the azimuthal weight */
   double wgt = _quadrature->getAzimSpacing(azim_index)
       * _quadrature->getAzimWeight(azim_index);
@@ -662,16 +656,13 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
   }
 
   /* Loop over segments to accumulate contribution to centroids */
-  Geometry* geometry = _track_generator->getGeometry();
   for (int s=0; s < track->getNumSegments(); s++) {
 
     /* Extract segment information */
     segment* curr_segment = &segments[s];
     long fsr = curr_segment->_region_id;
-    int track_idx = curr_segment->_track_idx;
     FP_PRECISION* sigma_t = curr_segment->_material->getSigmaT();
     double length = curr_segment->_length;
-    double length_2 = length * length;
 
     /* Extract FSR information */
     double volume = _FSR_volumes[fsr];
@@ -687,26 +678,34 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
     double zc = z + length * 0.5 * cos_theta;
 
     /* Set the FSR src constants buffer to zero */
-    memset(thread_src_constants, 0.0, _num_groups * _num_coeffs *
-           sizeof(double));
+    double thread_src_constants[_num_groups * _num_coeffs] __attribute__
+         ((aligned (VEC_ALIGNMENT)));
 
     double vol_impact = wgt * length / volume;
+#pragma omp simd aligned(sigma_t)
     for (int g=0; g < _num_groups; g++) {
 
-      thread_src_constants[g*_num_coeffs] += vol_impact * xc * xc;
-      thread_src_constants[g*_num_coeffs + 1] += vol_impact * yc * yc;
-      thread_src_constants[g*_num_coeffs + 2] += vol_impact * xc * yc;
+      thread_src_constants[g] = vol_impact * xc * xc;
+      thread_src_constants[_num_groups + g] = vol_impact * yc * yc;
+      thread_src_constants[2*_num_groups + g] = vol_impact * xc * yc;
 
+#ifndef THREED
       if (track_3D != NULL) {
-        thread_src_constants[g*_num_coeffs + 3] += vol_impact * xc * zc;
-        thread_src_constants[g*_num_coeffs + 4] += vol_impact * yc * zc;
-        thread_src_constants[g*_num_coeffs + 5] += vol_impact * zc * zc;
+        thread_src_constants[3*_num_groups + g] = vol_impact * xc * zc;
+        thread_src_constants[4*_num_groups + g] = vol_impact * yc * zc;
+        thread_src_constants[5*_num_groups + g] = vol_impact * zc * zc;
       }
+#else
+      thread_src_constants[3*_num_groups + g] = vol_impact * xc * zc;
+      thread_src_constants[4*_num_groups + g] = vol_impact * yc * zc;
+      thread_src_constants[5*_num_groups + g] = vol_impact * zc * zc;
+#endif
 
       /* Calculate the optical path length and source contribution */
       double tau = length * sigma_t[g];
       double src_constant = vol_impact * length / 2.0;
 
+#ifndef THREED
       if (track_3D == NULL) {
         for (int p=0; p < _quadrature->getNumPolarAngles()/2; p++) {
 
@@ -716,30 +715,44 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
               * src_constant * 2 * _quadrature->getPolarWeight(azim_index, p)
               * sin_theta;
 
-          thread_src_constants[g*_num_coeffs] += cos_phi * cos_phi * G2_src;
-          thread_src_constants[g*_num_coeffs + 1] += sin_phi * sin_phi
+          thread_src_constants[g] += cos_phi * cos_phi * G2_src;
+          thread_src_constants[_num_groups + g] += sin_phi * sin_phi
               * G2_src;
-          thread_src_constants[g*_num_coeffs + 2] += sin_phi * cos_phi
+          thread_src_constants[2*_num_coeffs + g] += sin_phi * cos_phi
               * G2_src;
         }
       }
       else {
-
         double G2_src = _exp_evaluator->computeExponentialG2(tau) *
             length * src_constant;
 
-        thread_src_constants[g*_num_coeffs] += cos_phi * cos_phi * G2_src
+        thread_src_constants[g] += cos_phi * cos_phi * G2_src
             * sin_theta * sin_theta;
-        thread_src_constants[g*_num_coeffs + 1] += sin_phi * sin_phi * G2_src
+        thread_src_constants[_num_groups + g] += sin_phi * sin_phi * G2_src
             * sin_theta * sin_theta;
-        thread_src_constants[g*_num_coeffs + 2] += sin_phi * cos_phi * G2_src
+        thread_src_constants[2*_num_groups + g] += sin_phi * cos_phi * G2_src
             * sin_theta * sin_theta;
-        thread_src_constants[g*_num_coeffs + 3] += cos_phi * cos_theta * G2_src
+        thread_src_constants[3*_num_groups + g] += cos_phi * cos_theta * G2_src
             * sin_theta;
-        thread_src_constants[g*_num_coeffs + 4] += sin_phi * cos_theta * G2_src
+        thread_src_constants[4*_num_groups + g] += sin_phi * cos_theta * G2_src
             * sin_theta;
-        thread_src_constants[g*_num_coeffs + 5] += cos_theta * cos_theta * G2_src;
+        thread_src_constants[5*_num_groups + g] += cos_theta * cos_theta * G2_src;
       }
+#endif
+      double G2_src = _exp_evaluator->computeExponentialG2(tau) *
+           length * src_constant;
+
+      thread_src_constants[g] += cos_phi * cos_phi * G2_src
+           * sin_theta * sin_theta;
+      thread_src_constants[_num_groups + g] += sin_phi * sin_phi * G2_src
+           * sin_theta * sin_theta;
+      thread_src_constants[2*_num_groups + g] += sin_phi * cos_phi * G2_src
+           * sin_theta * sin_theta;
+      thread_src_constants[3*_num_groups + g] += cos_phi * cos_theta * G2_src
+           * sin_theta;
+      thread_src_constants[4*_num_groups + g] += sin_phi * cos_theta * G2_src
+           * sin_theta;
+      thread_src_constants[5*_num_groups + g] += cos_theta * cos_theta * G2_src;
     }
 
     /* Set the lock for this FSR */
@@ -762,10 +775,11 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
     }
 
     /* Set the source constants for all groups and coefficients */
+#pragma omp simd
     for (int g=0; g < _num_groups; g++) {
       for (int i=0; i < _num_coeffs; i++)
-        _src_constants[fsr*_num_groups*_num_coeffs + g*_num_coeffs + i] +=
-          thread_src_constants[g*_num_coeffs + i];
+        _src_constants[fsr*_num_groups*_num_coeffs + i*_num_groups + g] +=
+          thread_src_constants[i*_num_groups + g];
     }
 
     /* Unset the lock for this FSR */

@@ -1571,6 +1571,11 @@ void Solver::printTimerReport() {
   msg_string.resize(53, '.');
   log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), tot_time);
 
+  double lsc_time = _timer->getSplit("Linear source constant component");
+  msg_string = "Linear source constant component";
+  msg_string.resize(53, '.');
+  log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), lsc_time);
+
   /* Time per iteration */
   double time_per_iter = tot_time / _num_iterations;
   msg_string = "Solution time per iteration";
