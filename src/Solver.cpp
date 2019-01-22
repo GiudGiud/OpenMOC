@@ -36,7 +36,7 @@ Solver::Solver(TrackGenerator* track_generator) {
   _exp_evaluators[0] = new ExpEvaluator*[_num_exp_evaluators_polar];
   _exp_evaluators[0][0] = new ExpEvaluator();
 #ifndef THREED
-  _solve_3D = false;
+  _SOLVE_3D = false;
 #endif
   _segment_formation = EXPLICIT_2D;
 
@@ -424,7 +424,7 @@ void Solver::setTrackGenerator(TrackGenerator* track_generator) {
     _polar_spacings = _quad->getPolarSpacings();
     _tracks_per_stack = track_generator_3D->getTracksPerStack();
 #ifndef THREED
-    _solve_3D = true;
+    _SOLVE_3D = true;
 #endif
   }
   else {
@@ -434,7 +434,7 @@ void Solver::setTrackGenerator(TrackGenerator* track_generator) {
     log_printf(ERROR, "OpenMOC has been compiled for 3D cases only, please "
                "recompile without the -DTHREED optimization flag.");
 #else
-    _solve_3D = false;
+    _SOLVE_3D = false;
 #endif
   }
 
@@ -655,21 +655,27 @@ void Solver::initializeExpEvaluators() {
   ExpEvaluator* first_evaluator = _exp_evaluators[0][0];
   first_evaluator->setQuadrature(_quad);
 
-  if (first_evaluator->isUsingInterpolation()) {
+  /* Find minimum of optional user-specified and actual max taus */
+  FP_PRECISION max_tau_a = _track_generator->getMaxOpticalLength();
+  FP_PRECISION max_tau_b = first_evaluator->getMaxOpticalLength();
 
-    /* Find minimum of optional user-specified and actual max taus */
-    FP_PRECISION max_tau_a = _track_generator->getMaxOpticalLength();
-    FP_PRECISION max_tau_b = first_evaluator->getMaxOpticalLength();
-    FP_PRECISION max_tau = std::min(max_tau_a, max_tau_b) + TAU_NUDGE;
+  /* Give track generator a max optical length for segments */
+  _track_generator->setMaxOpticalLength(max_tau_b);
 
-    /* Split Track segments so that none has a greater optical length */
-    _track_generator->setMaxOpticalLength(max_tau);
+  /* Split Track segments so that none has a greater optical length */
+  if (max_tau_a > max_tau_b) {
+
+    log_printf(NODAL, "Splitting segments since the maximum optical length in "
+               "the domain is %f and the maximum supported by the exponential "
+               "evaluator is %f.", max_tau_a, max_tau_b);
+
     if (_segment_formation == EXPLICIT_3D || _segment_formation == EXPLICIT_2D)
-      _track_generator->splitSegments(max_tau);
+      _track_generator->splitSegments(max_tau_b);
+    /* For non explicit ray tracing, segments are split on-the-fly */
     else
       _track_generator->countSegments();
 
-    first_evaluator->setMaxOpticalLength(max_tau);
+    first_evaluator->setMaxOpticalLength(max_tau_b);
   }
 
   /* Delete old exponential evaluators */
@@ -683,7 +689,7 @@ void Solver::initializeExpEvaluators() {
 
   /* Determine number of exponential evaluators */
   _num_exp_evaluators_azim = _num_azim / 4;
-  if (_solve_3D)
+  if (_SOLVE_3D)
     _num_exp_evaluators_polar = _num_polar / 2;
   else
     _num_exp_evaluators_polar = 1;
@@ -713,7 +719,7 @@ void Solver::initializeExpEvaluators() {
   /* Initialize exponential interpolation table */
   for (int a=0; a < _num_exp_evaluators_azim; a++)
     for (int p=0; p < _num_exp_evaluators_polar; p++)
-      _exp_evaluators[a][p]->initialize(a, p, _solve_3D);
+      _exp_evaluators[a][p]->initialize(a, p, _SOLVE_3D);
 }
 
 
@@ -748,7 +754,7 @@ void Solver::initializeFSRs() {
                _geometry->getNumEnergyGroups());
 #endif
 
-  if (_solve_3D) {
+  if (_SOLVE_3D) {
     _fluxes_per_track = _num_groups;
   }
   else {
@@ -1051,7 +1057,7 @@ void Solver::initializeCmfd() {
   _cmfd->initializeGroupMap();
 
   /* Give CMFD number of FSRs and FSR property arrays */
-  _cmfd->setSolve3D(_solve_3D);
+  _cmfd->setSolve3D(_SOLVE_3D);
   _cmfd->setNumFSRs(_num_FSRs);
   _cmfd->setFSRVolumes(_FSR_volumes);
   _cmfd->setFSRMaterials(_FSR_materials);
@@ -1099,7 +1105,7 @@ void Solver::calculateInitialSpectrum(double threshold) {
   _geometry->initializeSpectrumCalculator(&spectrum_calculator);
 
   /* If 2D Solve, set z-direction mesh size to 1 and depth to 1.0 */
-  if (!_solve_3D) {
+  if (!_SOLVE_3D) {
     spectrum_calculator.setNumZ(1);
     spectrum_calculator.setBoundary(SURFACE_Z_MIN, REFLECTIVE);
     spectrum_calculator.setBoundary(SURFACE_Z_MAX, REFLECTIVE);
@@ -1111,7 +1117,7 @@ void Solver::calculateInitialSpectrum(double threshold) {
   spectrum_calculator.initializeGroupMap();
 
   /* Give the spectrum calculator the number of FSRs and FSR property arrays */
-  spectrum_calculator.setSolve3D(_solve_3D);
+  spectrum_calculator.setSolve3D(_SOLVE_3D);
   spectrum_calculator.setNumFSRs(_num_FSRs);
   spectrum_calculator.setFSRVolumes(_FSR_volumes);
   spectrum_calculator.setFSRMaterials(_FSR_materials);
@@ -2091,7 +2097,7 @@ void Solver::printInputParamsSummary() {
              _track_generator->getDesiredAzimSpacing());
   log_printf(NORMAL, "Number of polar angles = %d",
              _quad->getNumPolarAngles());
-  if (_solve_3D) {
+  if (_SOLVE_3D) {
     TrackGenerator3D* track_generator_3D =
       static_cast<TrackGenerator3D*>(_track_generator);
     log_printf(NORMAL, "Z-spacing = %f",

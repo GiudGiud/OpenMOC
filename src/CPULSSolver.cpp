@@ -197,7 +197,7 @@ void CPULSSolver::computeFSRSources(int iteration) {
   CPUSolver::computeFSRSources(iteration);
 
   int num_coeffs = 3;
-  if (_solve_3D)
+  if (_SOLVE_3D)
     num_coeffs = 6;
 
 #pragma omp parallel
@@ -292,7 +292,7 @@ void CPULSSolver::computeFSRSources(int iteration) {
         src_z = scatter_source_z + chi[g] * fission_source_z;
 
         /* Compute total (scatter+fission) reduced source moments */
-        if (_solve_3D) {
+        if (_SOLVE_3D) {
           if (_reduced_sources(r,g) > 1e-15 || iteration > 29) {
             _reduced_sources_xyz(r,g,0) = ONE_OVER_FOUR_PI / 2 *
                  (_FSR_lin_exp_matrix[r*num_coeffs  ] * src_x +
@@ -363,7 +363,7 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
   FP_PRECISION* position = curr_segment->_starting_position;
   ExpEvaluator* exp_evaluator = _exp_evaluators[azim_index][polar_index];
 
-  if (_solve_3D) {
+  if (_SOLVE_3D) {
 
     /* Compute the segment midpoint (with factor 2 for LS) */
     FP_PRECISION center_x2[3];
@@ -379,12 +379,38 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
     FP_PRECISION exp_H[_num_groups] __attribute__ ((aligned(VEC_ALIGNMENT)));
     FP_PRECISION tau[_num_groups] __attribute__ ((aligned(VEC_ALIGNMENT)));
 
-#pragma omp simd aligned(sigma_t, tau, exp_F1, exp_F2, exp_H)
+#pragma omp simd aligned(sigma_t, tau) //, tau, exp_F1, exp_F2, exp_H)
     for (int e=0; e < _num_groups; e++) {
-      tau[e] = sigma_t[e] * length_2D;
-      exp_evaluator->retrieveExponentialComponents(tau[e], 0, &exp_F1[e],
-                                                   &exp_F2[e], &exp_H[e]);
+        tau[e] = std::max(FP_PRECISION(1e-5), length * sigma_t[e]);
+        tau[e] = std::min(FP_PRECISION(5.), tau[e]);
     }
+
+   FP_PRECISION inv_sin_theta = exp_evaluator->getInverseSinTheta();
+#pragma omp simd aligned(tau, exp_F1)
+    for (int e=0; e < _num_groups; e++) {
+      expF1_fractional(tau[e], &exp_F1[e]);
+      exp_F1[e] *= inv_sin_theta;
+    }
+#pragma omp simd aligned(tau, exp_F2)
+    for (int e=0; e < _num_groups; e++) {
+      expF2_fractional(tau[e], &exp_F2[e]);
+      exp_F2[e] *= inv_sin_theta*inv_sin_theta;
+    }
+#pragma omp simd aligned(tau, exp_H)
+    for (int e=0; e < _num_groups; e++) {
+      expH_fractional(tau[e], &exp_H[e]);
+      exp_H[e] *= inv_sin_theta;
+    }
+#pragma omp simd aligned(sigma_t, tau)
+    for (int e=0; e < _num_groups; e++)
+        tau[e] = exp_evaluator->convertDistance3Dto2D(tau[e]);
+
+//#pragma omp simd aligned(sigma_t, tau, exp_F1, exp_F2, exp_H)
+//    for (int e=0; e < _num_groups; e++) {
+      //tau[e] = sigma_t[e] * length_2D;
+      //exp_evaluator->retrieveExponentialComponents(tau[e], 0, &exp_F1[e],
+      //                                             &exp_F2[e], &exp_H[e]);
+    //}
 
     // Compute the sources
     FP_PRECISION src_flat[_num_groups] 
@@ -558,7 +584,7 @@ void CPULSSolver::accumulateLinearFluxContribution(long fsr_id,
 void CPULSSolver::addSourceToScalarFlux() {
 
   int nc = 3;
-  if (_solve_3D)
+  if (_SOLVE_3D)
     nc = 6;
 
 #pragma omp parallel
@@ -584,34 +610,34 @@ void CPULSSolver::addSourceToScalarFlux() {
 
         _scalar_flux_xyz(r,e,0) /= volume;
         _scalar_flux_xyz(r,e,0) += flux_const * _reduced_sources_xyz(r,e,0)
-            * _FSR_source_constants[r*_num_groups*nc + nc*e    ];
+            * _FSR_source_constants[r*_num_groups*nc + e];
         _scalar_flux_xyz(r,e,0) += flux_const * _reduced_sources_xyz(r,e,1)
-            * _FSR_source_constants[r*_num_groups*nc + nc*e + 2];
+            * _FSR_source_constants[r*_num_groups*nc + 2*_num_groups + e];
 
         _scalar_flux_xyz(r,e,1) /= volume;
         _scalar_flux_xyz(r,e,1) += flux_const * _reduced_sources_xyz(r,e,0)
-            * _FSR_source_constants[r*_num_groups*nc + nc*e + 2];
+            * _FSR_source_constants[r*_num_groups*nc + 2*_num_groups + e];
         _scalar_flux_xyz(r,e,1) += flux_const * _reduced_sources_xyz(r,e,1)
-            * _FSR_source_constants[r*_num_groups*nc + nc*e + 1];
+            * _FSR_source_constants[r*_num_groups*nc + _num_groups + e];
 
-        if (_solve_3D) {
+        if (_SOLVE_3D) {
           _scalar_flux_xyz(r,e,0) += flux_const * _reduced_sources_xyz(r,e,2)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 3];
+              * _FSR_source_constants[r*_num_groups*nc + 3*_num_groups + e];
           _scalar_flux_xyz(r,e,1) += flux_const * _reduced_sources_xyz(r,e,2)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 4];
+              * _FSR_source_constants[r*_num_groups*nc + 4*_num_groups + e];
 
           _scalar_flux_xyz(r,e,2) /= volume;
           _scalar_flux_xyz(r,e,2) += flux_const * _reduced_sources_xyz(r,e,0)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 3];
+              * _FSR_source_constants[r*_num_groups*nc + 3*_num_groups + e];
           _scalar_flux_xyz(r,e,2) += flux_const * _reduced_sources_xyz(r,e,1)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 4];
+              * _FSR_source_constants[r*_num_groups*nc + 4*_num_groups + e];
           _scalar_flux_xyz(r,e,2) += flux_const * _reduced_sources_xyz(r,e,2)
-              * _FSR_source_constants[r*_num_groups*nc + nc*e + 5];
+              * _FSR_source_constants[r*_num_groups*nc + 5*_num_groups + e];
         }
 
         _scalar_flux_xyz(r,e,0) /= sigma_t[e];
         _scalar_flux_xyz(r,e,1) /= sigma_t[e];
-        if (_solve_3D)
+        if (_SOLVE_3D)
           _scalar_flux_xyz(r,e,2) /= sigma_t[e];
       }
     }
@@ -836,7 +862,7 @@ FP_PRECISION CPULSSolver::getFluxByCoords(LocalCoords* coords, int group) {
   double flux_y = 0.0;
   double flux_z = 0.0;
 
-  if (_solve_3D) {
+  if (_SOLVE_3D) {
     flux_x = (x - xc) *
         (_FSR_lin_exp_matrix[fsr*6  ] * _scalar_flux_xyz(fsr, group, 0) +
          _FSR_lin_exp_matrix[fsr*6+2] * _scalar_flux_xyz(fsr, group, 1) +
@@ -903,7 +929,7 @@ void CPULSSolver::initializeLinearSourceConstants() {
   {
     /* Initialize linear source constant component */
     long size = 3 * _geometry->getNumEnergyGroups() * _geometry->getNumFSRs();
-    if (_solve_3D)
+    if (_SOLVE_3D)
       size *= 2;
 
     long max_size = size;
@@ -921,7 +947,7 @@ void CPULSSolver::initializeLinearSourceConstants() {
 
     /* Initialize linear source matrix coefficients */
     size = _geometry->getNumFSRs() * 3;
-    if (_solve_3D)
+    if (_SOLVE_3D)
       size *= 2;
     _FSR_lin_exp_matrix = new double[size]();
   }

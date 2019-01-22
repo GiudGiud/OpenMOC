@@ -3892,8 +3892,8 @@ void Geometry::loadFromFile(std::string filename, bool non_uniform_lattice,
 
     /* Set absorption cross section */
     for (int g=0; g < num_groups; g++) {
-      ret = twiddleRead(&value, sizeof(double), 1, in);
-      mat->setSigmaAByGroup(value, g+1);
+      //ret = twiddleRead(&value, sizeof(double), 1, in);
+      //mat->setSigmaAByGroup(value, g+1);
     }
 
     /* Set scattering cross-section */

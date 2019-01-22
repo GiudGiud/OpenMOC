@@ -1832,7 +1832,7 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment,
   FP_PRECISION* sigma_t = curr_segment->_material->getSigmaT();
   ExpEvaluator* exp_evaluator = _exp_evaluators[azim_index][polar_index];
 
-  if (_solve_3D) {
+  if (_SOLVE_3D) {
 
     FP_PRECISION length_2D = exp_evaluator->convertDistance3Dto2D(length);
 

@@ -29,7 +29,7 @@ CMFD_PRECISION ?= single
 #case = models/homogeneous/homogeneous.cpp
 #case = models/non-uniform-lattice/non-uniform-lattice.cpp
 #case ?= models/run_time_standard/run_time_standard.cpp
-case ?= models/assembly_5b/load-assembly.cpp
+case ?= models/assembly_4bf/load-assembly.cpp
 #case ?= models/core_2/load-core.cpp
 
 source = \
@@ -188,11 +188,11 @@ ifeq ($(OPTIMIZE),yes)
     CFLAGS += -O3 -ffast-math -fvectorize -fpic
   endif
   # Set the number of groups at compile time
-  #CFLAGS += -DNGROUPS=70
+  CFLAGS += -DNGROUPS=70
   # Set the source to linear source at compile time
-  #CFLAGS += -DLINEARSOURCE
+  CFLAGS += -DLINEARSOURCE
   # Set the dimension to 3D at compile time
-  #CFLAGS += -DTHREED
+  CFLAGS += -DTHREED
 endif
 
 # Optimization report flags
