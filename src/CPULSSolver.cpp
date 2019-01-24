@@ -382,7 +382,7 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
 #pragma omp simd aligned(sigma_t, tau) //, tau, exp_F1, exp_F2, exp_H)
     for (int e=0; e < _num_groups; e++) {
         tau[e] = std::max(FP_PRECISION(1e-5), length * sigma_t[e]);
-        tau[e] = std::min(FP_PRECISION(5.), tau[e]);
+        //tau[e] = std::min(FP_PRECISION(5.), tau[e]);   // ONLY FOR POLY
     }
 
    FP_PRECISION inv_sin_theta = exp_evaluator->getInverseSinTheta();
