@@ -3513,7 +3513,7 @@ void Geometry::dumpToFile(std::string filename, bool non_uniform_lattice) {
     FP_PRECISION* xs = mat->getSigmaA();
     for (int g=0; g < num_groups; g++) {
       double value = xs[g];
-      fwrite(&value, sizeof(double), 1, out);
+      //fwrite(&value, sizeof(double), 1, out);
     }
 
     /* Print scattering cross-section */
