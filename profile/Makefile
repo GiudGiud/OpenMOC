@@ -8,8 +8,8 @@ OPTIMIZE       ?= yes
 DEBUG          ?= no
 PROFILE        ?= no
 INFO           ?= no
-PRECISION      ?= double
-CMFD_PRECISION ?= double
+PRECISION      ?= single
+CMFD_PRECISION ?= single
 
 #===============================================================================
 # Source Code List
@@ -105,7 +105,7 @@ endif
 
 # MPI wrapped compiler
 ifeq ($(COMPILER),mpi)
-  CC = mpicc
+  CC = mpic++
   CFLAGS += -DMPIx
   LDFLAGS += -lm
   LDFLAGS += -lstdc++

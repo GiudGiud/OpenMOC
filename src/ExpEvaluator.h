@@ -11,9 +11,10 @@
 #ifdef __cplusplus
 #define _USE_MATH_DEFINES
 #include "log.h"
-#include "Quadrature.h"
-#include <math.h>
 #include "exponentials.h"
+#include "Quadrature.h"
+#include <malloc.h>
+#include <math.h>
 #endif
 
 
