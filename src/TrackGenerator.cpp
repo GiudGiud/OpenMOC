@@ -332,18 +332,21 @@ FP_PRECISION* TrackGenerator::getFSRVolumes() {
   VolumeCalculator volume_calculator(this);
   volume_calculator.execute();
 
-  /* Check to ensure all FSRs are crossed by at least one track */
+  /* Check to ensure all FSRs are crossed by at least one track */   /////////////////////////
+  long num_zero_volume_fsrs = 0;
   for (long i=0; i < num_FSRs; i++) {
     if (fabs(_FSR_volumes[i]) < FLT_EPSILON) {
-      log_printf(ERROR, "Zero volume calculated for FSR %d, point (%f, %f, %f)",
+      num_zero_volume_fsrs++;
+      log_printf(WARNING, "Zero volume calculated for FSR %d, point (%f, %f, %f)",
                  i, _geometry->getFSRPoint(i)->getX(),
                  _geometry->getFSRPoint(i)->getY(),
                  _geometry->getFSRPoint(i)->getZ());
-      log_printf(ERROR, "Zero volume calculated in an FSR region since no "
-               "track traversed the FSR. Use a finer track laydown to ensure "
-               "every FSR is traversed.");
     }
   }
+  if (num_zero_volume_fsrs > 0)
+    log_printf(WARNING_ONCE, "Zero volume calculated in %ld FSR regions since "
+               "no track traversed the FSRs. Use a finer track laydown to "
+               "ensure every FSR is traversed.", num_zero_volume_fsrs);
 
   return _FSR_volumes;
 }
@@ -749,7 +752,7 @@ void TrackGenerator::generateTracks() {
 
   /* Generate Tracks, perform ray tracing across the geometry, and store
    * the data to a Track file */
-  try {
+  //try {
 
     /* Create default quadrature set if user one has not been set */
     if (_quadrature == NULL)
@@ -804,11 +807,11 @@ void TrackGenerator::generateTracks() {
     /* Precompute the quadrature weights */
     _quadrature->precomputeWeights(_segment_formation != EXPLICIT_2D);
 
-  }
-  catch (std::exception &e) {
-    log_printf(ERROR, "Unable to allocate memory needed to generate "
-               "Tracks. Backtrace:\n%s", e.what());
-  }
+  //}
+  //catch (std::exception &e) {
+  //  log_printf(ERROR, "Unable to allocate memory needed to generate "
+  //             "Tracks. Backtrace:\n%s", e.what());
+ // }
 
   /* Stop recording track generation time and print */
 #ifdef MPIx
@@ -1027,7 +1030,11 @@ void TrackGenerator::initializeTracks() {
  */
 void TrackGenerator::initializeTrackReflections() {
 
+#ifndef MPIx
   log_printf(NORMAL, "Initializing 2D tracks reflections...");
+#else
+  log_printf(NORMAL, "Initializing 2D tracks reflections and connections...");
+#endif
 
   /* Generate the 2D track cycles */
   for (int a=0; a < _num_azim/2; a++) {
@@ -1037,47 +1044,72 @@ void TrackGenerator::initializeTrackReflections() {
       /* Get current track */
       Track* track = &_tracks_2D[a][i];
 
-      /* Set the foward boundary conditions */
+      /* Set the forward boundary conditions */
       if (a < _num_azim/4) {
+
         if (i < _num_y[a]) {
           track->setBCFwd(_geometry->getMaxXBoundaryType());
           track->setSurfaceOut(SURFACE_X_MAX);
+#ifdef MPIx
+          track->setDomainFwd(_geometry->getNeighborDomain(1, 0, 0));
+#endif
         }
         else {
           track->setBCFwd(_geometry->getMaxYBoundaryType());
           track->setSurfaceOut(SURFACE_Y_MAX);
+#ifdef MPIx
+          track->setDomainFwd(_geometry->getNeighborDomain(0, 1, 0));
+#endif
         }
 
         if (i < _num_x[a]) {
           track->setBCBwd(_geometry->getMinYBoundaryType());
           track->setSurfaceIn(SURFACE_Y_MIN);
+#ifdef MPIx
+          track->setDomainBwd(_geometry->getNeighborDomain(0, -1, 0));
+#endif
         }
         else {
           track->setBCBwd(_geometry->getMinXBoundaryType());
           track->setSurfaceIn(SURFACE_X_MIN);
+#ifdef MPIx
+          track->setDomainBwd(_geometry->getNeighborDomain(-1, 0, 0));
+#endif
         }
       }
-
       /* Set the backward boundary conditions */
       else {
         if (i < _num_y[a]) {
           track->setBCFwd(_geometry->getMinXBoundaryType());
           track->setSurfaceOut(SURFACE_X_MIN);
+#ifdef MPIx
+          track->setDomainFwd(_geometry->getNeighborDomain(-1, 0, 0));
+#endif
         }
         else {
           track->setBCFwd(_geometry->getMaxYBoundaryType());
           track->setSurfaceOut(SURFACE_Y_MAX);
+#ifdef MPIx
+          track->setDomainFwd(_geometry->getNeighborDomain(0, 1, 0));
+#endif
         }
 
         if (i < _num_x[a]) {
           track->setBCBwd(_geometry->getMinYBoundaryType());
           track->setSurfaceIn(SURFACE_Y_MIN);
+#ifdef MPIx
+          track->setDomainBwd(_geometry->getNeighborDomain(0, -1, 0));
+#endif
         }
         else {
           track->setBCBwd(_geometry->getMaxXBoundaryType());
           track->setSurfaceIn(SURFACE_X_MAX);
+#ifdef MPIx
+          track->setDomainBwd(_geometry->getNeighborDomain(1, 0, 0));
+#endif
         }
       }
+      
 
       /* Set connecting tracks in forward direction */
       if (i < _num_y[a]) {
@@ -1155,6 +1187,14 @@ void TrackGenerator::segmentize() {
                "TrackGenerators.", min_z, max_z);
     Cmfd* cmfd = _geometry->getCmfd();
     if (cmfd != NULL) {
+
+      /* Check that CMFD has been initialized */
+      if (cmfd->getLattice() == NULL)
+        log_printf(ERROR, "CMFD has not been initialized before generating "
+                   "tracks. A call to geometry.initializeFlatSourceRegions() " /////////////////////////////
+                   "may be missing.");
+
+      /* Re-initialize CMFD lattice with 2D dimensions */
       cmfd->setWidthZ(std::numeric_limits<double>::infinity());
       Point offset;
       offset.setX(cmfd->getLattice()->getOffset()->getX());
@@ -1652,7 +1692,6 @@ void TrackGenerator::initializeTracksArray() {
 
       /* Get current track and azim group ids */
       Track* track = &_tracks_2D[a][i];
-
       track->setUid(uid);
       _tracks_2D_array[uid] = track;
       uid++;
@@ -1714,6 +1753,26 @@ int TrackGenerator::get2DTrackID(int a, int x) {
 
   uid += x;
   return uid;
+}
+
+
+/**
+ * @brief Get the azimuthal angle of a 2D track based on its ID.
+ * @param id the track unique id
+ * @return Track azimuthal angle
+ */
+void TrackGenerator::getTrackAzimuthalAngle(long uid, int* azim,
+                                           int* stack_index) {
+
+  long cum_num_tracks = 0;
+  for (int ai = 0; ai < _num_azim/2; ai++) {
+    cum_num_tracks += _num_x[ai] + _num_y[ai];
+    if (uid < cum_num_tracks) {
+      *azim = ai;
+      *stack_index = uid - (cum_num_tracks - _num_x[ai] - _num_y[ai]);
+      break;
+    }
+  }
 }
 
 

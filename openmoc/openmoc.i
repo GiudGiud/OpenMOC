@@ -107,6 +107,12 @@
 %ignore Matrix::getJA();
 %ignore Matrix::getDiag();
 
+%ignore TransportSweep::onTrack;
+%ignore CPUSolver::tallyScalarFlux;
+%ignore ExpEvaluator;
+%ignore CPULSSolver::tallyLSScalarFlux;
+%ignore Cmfd::tallyCurrent;
+
 %exception {
   try {
     $function

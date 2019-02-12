@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #endif
 
+
 #undef track_flux
 /** Optimization macro to facilitate SIMD vectorization */
 #ifdef NGROUPS

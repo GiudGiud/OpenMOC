@@ -173,6 +173,7 @@ public:
   virtual bool containsTracks();
   virtual bool containsSegments();
   int get2DTrackID(int a, int x);
+  void getTrackAzimuthalAngle(long uid, int* azim, int* stack_index);
   long* getTracksPerAzim();
 
   /* Set parameters */

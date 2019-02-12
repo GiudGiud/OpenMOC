@@ -75,6 +75,7 @@ Material::Material(int id, const char* name) {
   _nu_sigma_f = NULL;
   _chi = NULL;
   _fiss_matrix = NULL;
+  _start_scalar_flux = NULL;
 
   _fissionable = false;
 
@@ -566,6 +567,7 @@ void Material::setNumEnergyGroups(const int num_groups) {
   _nu_sigma_f = new FP_PRECISION[_num_groups];
   _chi = new FP_PRECISION[_num_groups];
   _sigma_s = new FP_PRECISION[_num_groups*_num_groups];
+  _start_scalar_flux = new FP_PRECISION[_num_groups];
 
   /* Assign the null vector to each data array */
   memset(_sigma_t, 0, sizeof(FP_PRECISION) * _num_groups);
@@ -920,6 +922,25 @@ void Material::setSigmaAByGroup(double xs, int group) {
   _sigma_a[group-1] = FP_PRECISION(xs);
 }
 
+
+void Material::setStartFluxByGroup(double phi, int group) {
+
+  if (_start_scalar_flux == NULL)
+    _start_scalar_flux = new FP_PRECISION[_num_groups];
+
+  _start_scalar_flux[group - 1] = phi;
+  _flux_guess = true;
+}
+
+
+bool Material::isFluxGuessOn() {
+  return _flux_guess;
+}
+
+FP_PRECISION Material::getStartFluxByGroup(int group) {
+
+  return _start_scalar_flux[group - 1];
+}
 
 /**
  * @brief Builds the fission matrix from chi and the fission cross-section.

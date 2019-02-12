@@ -172,9 +172,18 @@ inline FP_PRECISION ExpEvaluator::computeExponential(FP_PRECISION tau,
   /* Limit lower range of tau for numerical precision reasons */
   tau = std::max(FP_PRECISION(1e-5), tau);
 
-  expF1_fractional(tau * inv_sin_theta, &exp_F1);
+  //expF1_fractional(tau * inv_sin_theta, &exp_F1);
 
-  return inv_sin_theta * exp_F1;
+  //return inv_sin_theta * exp_F1;
+
+  /* Old version */
+  _interpolate = true;
+  //tau /= inv_sin_theta;
+  int exp_index = getExponentialIndex(tau);
+  FP_PRECISION dt = getDifference(exp_index, tau);
+  FP_PRECISION dt2 = dt * dt;
+  exp_F1 = computeExponentialF1(exp_index,polar_offset,dt,dt2) ;
+  return exp_F1;
 }
 
 
@@ -383,7 +392,7 @@ inline void ExpEvaluator::retrieveExponentialComponents(FP_PRECISION tau,
   tau = std::max(FP_PRECISION(1e-5), tau);
   //tau = std::min(FP_PRECISION(5.), tau);
   tau *= inv_sin_theta;
-  tau = std::min(FP_PRECISION(5.), tau);   //////////////////
+  //tau = std::min(FP_PRECISION(5.), tau);   //////////////////
 
   /* Compute exponentials */    //4e
    expF1_poly(tau, exp_F1);

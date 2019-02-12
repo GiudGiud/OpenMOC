@@ -383,7 +383,8 @@ private:
 #endif
   void unpackSplitCurrents(bool faces);
   void copyFullSurfaceCurrents();
-  void checkNeutronBalance(bool pre_split=true, bool old_source=false);
+  void checkNeutronBalance(int moc_iteration, bool pre_split=true,
+                           bool old_source=false);
   void printProlongationFactors(int iteration);
 
 public:
@@ -527,8 +528,6 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
 
   int surf_id, cell_id, cmfd_group;
   int ncg = _num_cmfd_groups;
-  CMFD_PRECISION currents[_num_cmfd_groups] 
-       __attribute__ ((aligned(VEC_ALIGNMENT))) = {0.0};
 
   /* Check if the current needs to be tallied */
   bool tally_current = false;
@@ -546,6 +545,8 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
   /* Tally current if necessary */
   if (tally_current) {
 
+    CMFD_PRECISION currents[_num_cmfd_groups] 
+         __attribute__ ((aligned(VEC_ALIGNMENT))) = {0.0};
     int local_cell_id = getLocalCMFDCell(cell_id);
 
     if (_SOLVE_3D) {
@@ -568,12 +569,11 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
         _surface_currents->incrementValues
             (local_cell_id, surf_id*ncg, (surf_id+1)*ncg - 1, currents);
       }
-      /* Increment currents on corners */
+      /* Increment currents on edges and corners */
       else {
 
-        omp_set_lock(&_edge_corner_lock);
-
         int first_ind = (local_cell_id * NUM_SURFACES + surf_id) * ncg;
+        omp_set_lock(&_edge_corner_lock);
 
 #pragma omp simd aligned(currents)
         for (int g=0; g < ncg; g++)
@@ -584,7 +584,7 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
     }
     else {
       int pe = 0;
-      for (int p = 0; p < _num_polar/2; p++) {
+      for (int p=0; p < _num_polar/2; p++) {
         for (int e=0; e < _num_moc_groups; e++) {
 
           /* Get the CMFD group */
@@ -602,9 +602,9 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
             (local_cell_id, surf_id*ncg, (surf_id+1)*ncg - 1, currents);
       }
       else {
-        omp_set_lock(&_edge_corner_lock);
 
         int first_ind = (local_cell_id * NUM_SURFACES + surf_id) * ncg;
+        omp_set_lock(&_edge_corner_lock);
 
         /* Add contribution to corner current */
 #pragma omp simd aligned(currents)

@@ -161,9 +161,9 @@ class configuration:
     compiler_flags = dict()
 
     compiler_flags['gcc'] = ['-c', '-O3', '-ffast-math', '-fopenmp',
-                             '-std=c++11', '-fpic']
+                             '-std=c++11', '-fpic', '-march=native', '-DNGROUPS=70']  #'-fopt-info-all'
     compiler_flags['mpicc'] = ['-c', '-O3', '-ffast-math', '-fopenmp',
-                               '-std=c++11', '-fpic']
+                               '-std=c++11', '-fpic', '-march=native', '-DNGROUPS=70']
     compiler_flags['clang'] = ['-c', '-O3', '-ffast-math', '-std=c++11',
                                '-fopenmp', '-fvectorize', '-fpic',
                                '-Qunused-arguments',
@@ -194,7 +194,7 @@ class configuration:
                               '-Wl,-install_name,' + get_openmoc_object_name()]
     else:
         linker_flags['gcc'] = ['-fopenmp', '-shared',
-                               '-Wl,-soname,' + get_openmoc_object_name()]
+                               '-Wl,-soname,' + get_openmoc_object_name()] #+ compiler_flags['gcc']
 
     if ('macosx' in get_platform()):
         linker_flags['mpicc'] = ['-fopenmp', '-dynamiclib', '-lpython2.7',
@@ -225,9 +225,9 @@ class configuration:
     # A dictionary of the shared libraries to use for each compiler type
     shared_libraries = dict()
 
-    shared_libraries['gcc'] = ['stdc++', 'gomp', 'dl','pthread', 'm']
-    shared_libraries['mpicc'] = ['stdc++', 'gomp', 'dl','pthread', 'm']
-    shared_libraries['clang'] = ['stdc++', 'gomp', 'dl','pthread', 'm']
+    shared_libraries['gcc'] = ['stdc++', 'm', 'gomp', 'pthread', 'dl']
+    shared_libraries['mpicc'] = ['stdc++', 'gomp', 'dl', 'pthread', 'm']
+    shared_libraries['clang'] = ['stdc++', 'gomp', 'dl', 'pthread', 'm']
     shared_libraries['icpc'] = ['stdc++', 'iomp5', 'pthread', 'irc',
                                 'imf','rt', 'mkl_rt','m',]
     shared_libraries['bgxlc'] = ['stdc++', 'pthread', 'm', 'xlsmp', 'rt']
@@ -355,13 +355,13 @@ class configuration:
         for precision in macros[compiler]:
             macros[compiler][precision].append(('OPENMP', None))
             macros[compiler][precision].append(('SWIG', None))
-        if cc == 'mpicc':
-            macros[compiler][precision].append(('MPIx', None))
+            if compiler == 'mpicc':
+                macros[compiler][precision].append(('MPIx', None))   ###########################
 
     # set CMFD precision and linear algebra solver tolerance
     for compiler in macros:
         for precision in macros[compiler]:
-            macros[compiler][precision].append(('CMFD_PRECISION', 'double'))
+            macros[compiler][precision].append(('CMFD_PRECISION', 'float'))
             macros[compiler][precision].append(('LINALG_TOL', 1E-15))
 
 
@@ -377,8 +377,9 @@ class configuration:
         if self.debug_mode:
             for k in self.compiler_flags:
                 self.compiler_flags[k].append('-g')
+                self.compiler_flags[k].append('-fno-omit-frame-pointer')
                 ind = [i for i, item in enumerate(self.compiler_flags[k]) \
-            if item.startswith('-O')]
+                       if item.startswith('-O')]
                 self.compiler_flags[k][ind[0]] = '-O0'
 
         # If the user wishes to compile using the address sanitizer, append
@@ -417,7 +418,7 @@ class configuration:
         # Add the mpi4py module directory
         try:
             import mpi4py
-            mpi4py_include = mpi4py.__file__
+            mpi4py_include = mpi4py.__file__.split("__")[0]+"include"
         except:
             mpi4py_include = ''
         self.include_directories['mpicc'].append(mpi4py_include)

@@ -719,7 +719,7 @@ void TraverseSegments::traceStackOTF(Track* flattened_track, int polar_index,
 
             /* Initialize CMFD surfaces to 2D CMFD surfaces */
             int cmfd_surface_fwd = segments_2D[s]._cmfd_surface_fwd;
-            int cmfd_surface_bwd = segments_2D[s]._cmfd_surface_bwd;
+            int cmfd_surface_bwd = segments_2D[s]._cmfd_surface_bwd;   //check for corners : in z done by findCMFDSUrf, in XY baked in segment2D 
 
             /* Get CMFD surfaces if necessary */
             double start_z = first_start_z + i * z_spacing;

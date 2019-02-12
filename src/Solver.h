@@ -405,6 +405,8 @@ protected:
   /* Whether to ray-trace and propagate fluxes at the same time */
   bool _OTF_transport;
 
+  void initializeFluxesWithMaterialSpectrum();
+
 public:
   Solver(TrackGenerator* track_generator=NULL);
   virtual ~Solver();

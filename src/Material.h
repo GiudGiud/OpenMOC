@@ -93,6 +93,9 @@ private:
   /** A 2D array of the fission matrix from/into each group */
   FP_PRECISION* _fiss_matrix;
 
+  /** An array of a possible start flux */
+  FP_PRECISION* _start_scalar_flux;
+
   /** A boolean representing whether or not this Material contains a non-zero
    *  fission cross-section and is fissionable */
   bool _fissionable;
@@ -100,6 +103,8 @@ private:
   /** A boolean to indicate whether or not the data has been
    * allocated to be vector aligned for SIMD instructions */
   bool _data_aligned;
+
+  bool _flux_guess;
 
   /** The number of vector widths needed to fit all energy groups */
   int _num_vector_groups;
@@ -127,8 +132,10 @@ public:
   FP_PRECISION getNuSigmaFByGroup(int group);
   FP_PRECISION getChiByGroup(int group);
   FP_PRECISION getFissionMatrixByGroup(int origin, int destination);
+  FP_PRECISION getStartFluxByGroup(int group);
   bool isFissionable();
   bool isDataAligned();
+  bool isFluxGuessOn();
   int getNumVectorGroups();
 
   void setName(const char* name);
@@ -150,6 +157,7 @@ public:
   void setSigmaSByGroup(double xs, int origin, int destination);
   void setChiByGroup(double xs, int group);
   void setSigmaAByGroup(double xs, int group);
+  void setStartFluxByGroup(double xs, int group);
 
   void buildFissionMatrix();
   void transposeProductionMatrices();

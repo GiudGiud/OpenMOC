@@ -630,6 +630,9 @@ void Geometry::setNumDomainModules(int num_x, int num_y, int num_z) {
   _num_modules_x = num_x;
   _num_modules_y = num_y;
   _num_modules_z = num_z;
+
+  log_printf(NORMAL, "Using a [%d %d %d] inner domain structure.", num_x,
+             num_y, num_z);
 }
 
 
@@ -1113,6 +1116,8 @@ long Geometry::findFSRId(LocalCoords* coords) {
       /* If CMFD acceleration is on, add FSR CMFD cell to FSR data */
       if (_cmfd != NULL)
         fsr->_cmfd_cell = _cmfd->findCmfdCell(coords->getHighestLevel());
+      if (fsr->_cmfd_cell == -1)
+        log_printf(NODAL, "FSR %d : cmfd cell %d, coords %f %f %f", fsr_id, fsr->_cmfd_cell, coords->getHighestLevel()->getX(), coords->getHighestLevel()->getY(), coords->getHighestLevel()->getZ());
     }
   }
 
@@ -3523,6 +3528,12 @@ void Geometry::dumpToFile(std::string filename, bool non_uniform_lattice) {
         fwrite(&value, sizeof(double), 1, out);
       }
     }
+
+    /* Print starting spectrum guess */
+    for (int g=0; g < num_groups; g++) {
+      double value = mat->getStartFluxByGroup(g+1);
+      fwrite(&value, sizeof(double), 1, out);
+    }
   }
 
   /* Print root universe ID */
@@ -3903,6 +3914,12 @@ void Geometry::loadFromFile(std::string filename, bool non_uniform_lattice,
         mat->setSigmaSByGroup(value, g+1, gp+1);
       }
     }
+
+    /* Set starting spectrum guess */
+    for (int g=0; g < num_groups; g++) {
+      ret = twiddleRead(&value, sizeof(double), 1, in);
+      mat->setStartFluxByGroup(value, g+1);
+    }
   }
 
   /* Read root universe ID */
@@ -4237,6 +4254,7 @@ void Geometry::loadFromFile(std::string filename, bool non_uniform_lattice,
       universes[i] = all_universes[array[i]];
     }
     lattice->setUniverses(num_z, num_y, num_x, universes);
+    delete [] lattice_iter->second;
   }
 
   /* Set root universe */

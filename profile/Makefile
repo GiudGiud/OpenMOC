@@ -29,7 +29,7 @@ CMFD_PRECISION ?= double
 #case = models/homogeneous/homogeneous.cpp
 #case = models/non-uniform-lattice/non-uniform-lattice.cpp
 #case ?= models/run_time_standard/run_time_standard.cpp
-case ?= models/assembly_2cb/load-assembly.cpp
+case ?= models/assembly_2cc/load-assembly.cpp        #     ////////////////// 
 #case ?= models/core_2/load-core.cpp
 
 source = \
@@ -93,7 +93,7 @@ non-uniform-lattice/non-uniform-lattice.cpp \
 # Sets Flags
 #===============================================================================
 
-CFLAGS = -std=gnu++0x
+CFLAGS = -std=gnu++0x #-g #-fsanitize=address -fno-omit-frame-pointer
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)
@@ -105,10 +105,10 @@ endif
 
 # MPI wrapped compiler
 ifeq ($(COMPILER),mpi)
-  CC = mpicc
+  CC = mpic++
   CFLAGS += -DMPIx
   LDFLAGS += -lm
-  LDFLAGS += -lstdc++
+  LDFLAGS += -lstdc++ #-lgomp -lpthread -ldl
 endif
 
 # intel Compiler
@@ -163,7 +163,7 @@ ifeq ($(CMFD_PRECISION),single)
   CFLAGS += -DCMFD_PRECISION=float -DLINALG_TOL=1E-7
 endif
 ifeq ($(CMFD_PRECISION),double)
-  CFLAGS += -DCMFD_PRECISION=double -DLINALG_TOL=1E-15
+  CFLAGS += -DCMFD_PRECISION=double -DLINALG_TOL=1E-12
 endif
 
 # Vector Flags
@@ -188,7 +188,7 @@ ifeq ($(OPTIMIZE),yes)
     CFLAGS += -O3 -ffast-math -fvectorize -fpic
   endif
   # Set the number of groups at compile time
-  #CFLAGS += -DNGROUPS=70
+  CFLAGS += -DNGROUPS=70
   # Set the source to linear source at compile time
   #CFLAGS += -DLINEARSOURCE
   # Set the dimension to 3D at compile time

@@ -147,7 +147,7 @@ void MOCKernel::setMaxOpticalLength(FP_PRECISION max_tau) {
  * @param mat Material associated with the segment
  * @param fsr_id the FSR ID of the FSR associated with the segment
  */
-void VolumeKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
+void VolumeKernel::execute(double length, Material* mat, long fsr_id,
                            int track_idx, int cmfd_surface_fwd,
                            int cmfd_surface_bwd, FP_PRECISION x_start,
                            FP_PRECISION y_start, FP_PRECISION z_start,
@@ -178,7 +178,7 @@ void VolumeKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
  * @param mat Material associated with the segment
  * @param fsr_id the FSR ID of the FSR associated with the segment
  */
-void CounterKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
+void CounterKernel::execute(double length, Material* mat, long fsr_id,
                             int track_idx, int cmfd_surface_fwd,
                             int cmfd_surface_bwd, FP_PRECISION x_start,
                             FP_PRECISION y_start, FP_PRECISION z_start,
@@ -218,7 +218,7 @@ void CounterKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
  * @param phi azimuthal angle of this segment
  * @param theta polar angle of this segment
  */
-void SegmentationKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
+void SegmentationKernel::execute(double length, Material* mat, long fsr_id,
                                 int track_idx, int cmfd_surface_fwd,
                                 int cmfd_surface_bwd, FP_PRECISION x_start,
                                 FP_PRECISION y_start, FP_PRECISION z_start,
@@ -346,7 +346,7 @@ void TransportKernel::setDirection(bool direction) {
  * @param phi azimuthal angle of this segment
  * @param theta polar angle of this segment
  */
-void TransportKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
+void TransportKernel::execute(double length, Material* mat, long fsr_id,
                               int track_idx, int cmfd_surface_fwd,
                               int cmfd_surface_bwd, FP_PRECISION x_start,
                               FP_PRECISION y_start, FP_PRECISION z_start,
@@ -367,9 +367,9 @@ void TransportKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
     num_cuts = length * max_sigma_t * sin_theta / _max_tau + 1;
 
   /* Handle the length of possible cuts of segment */
-  FP_PRECISION remain_length = length;
-  FP_PRECISION segment_length = std::min(_max_tau / (sin_theta * max_sigma_t),
-                                         length);
+  double remain_length = length;
+  double segment_length = std::min(_max_tau / (sin_theta * max_sigma_t),
+                                         FP_PRECISION(length));
 
   /* Get the track flux */
   long curr_track_id = _track_id + track_idx;
@@ -384,7 +384,7 @@ void TransportKernel::execute(FP_PRECISION length, Material* mat, long fsr_id,
   for (int i=0; i < num_cuts; i++) {
 
     /* Copy data into segment */
-    segment curr_segment;  //FIXME Consider allocating segment beforehand
+    segment curr_segment;  //FIXME Consider allocating segment beforehand -> it's on the stack, fine
     curr_segment._length = std::min(segment_length, remain_length);
     curr_segment._material = mat;
     curr_segment._region_id = fsr_id;

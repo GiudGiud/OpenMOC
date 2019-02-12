@@ -66,7 +66,7 @@ public:
   virtual void newTrack(Track* track);
 
   /* Executing function describes kernel behavior */
-  virtual void execute(FP_PRECISION length, Material* mat, long fsr_id,
+  virtual void execute(double length, Material* mat, long fsr_id,
                        int track_idx, int cmfd_surface_fwd,
                        int cmfd_surface_bwd, FP_PRECISION x_start, FP_PRECISION y_start,
                        FP_PRECISION z_start, FP_PRECISION phi, FP_PRECISION theta)=0;
@@ -86,7 +86,7 @@ class CounterKernel: public MOCKernel {
 
 public:
   CounterKernel(TrackGenerator* track_generator, int row_num);
-  void execute(FP_PRECISION length, Material* mat, long fsr_id,
+  void execute(double length, Material* mat, long fsr_id,
                int track_idx, int cmfd_surface_fwd, int cmfd_surface_bwd,
                FP_PRECISION x_start, FP_PRECISION y_start, FP_PRECISION z_start,
                FP_PRECISION phi, FP_PRECISION theta);
@@ -122,7 +122,7 @@ public:
 
   VolumeKernel(TrackGenerator* track_generator, int row_num);
   void newTrack(Track* track);
-  void execute(FP_PRECISION length, Material* mat, long fsr_id,
+  void execute(double length, Material* mat, long fsr_id,
                int track_idx, int cmfd_surface_fwd, int cmfd_surface_bwd,
                FP_PRECISION x_start, FP_PRECISION y_start, FP_PRECISION z_start,
                FP_PRECISION phi, FP_PRECISION theta);
@@ -146,7 +146,7 @@ private:
 
 public:
   SegmentationKernel(TrackGenerator* track_generator, int row_num);
-  void execute(FP_PRECISION length, Material* mat, long fsr_id,
+  void execute(double length, Material* mat, long fsr_id,
                int track_idx, int cmfd_surface_fwd, int cmfd_surface_bwd,
                FP_PRECISION x_start, FP_PRECISION y_start, FP_PRECISION z_start,
                FP_PRECISION phi, FP_PRECISION theta);
@@ -192,7 +192,7 @@ public:
                     int track_id);
   void setTrackIndexes(int azim_index, int polar_index);
   void setDirection(bool direction);
-  void execute(FP_PRECISION length, Material* mat, long fsr_id,
+  void execute(double length, Material* mat, long fsr_id,
                int track_idx, int cmfd_surface_fwd, int cmfd_surface_bwd,
                FP_PRECISION x_start, FP_PRECISION y_start, FP_PRECISION z_start,
                FP_PRECISION phi, FP_PRECISION theta);

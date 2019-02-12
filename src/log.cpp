@@ -577,8 +577,8 @@ void log_printf(logLevel level, const char* format, ...) {
           printf("%s", "[  ERROR  ]  ");
           printf("%s", &msg_string[0]);
           fflush(stdout);
-          MPI_Finalize();
           MPI_Abort(_MPI_comm, 0);
+          MPI_Finalize();
           //FIXME Not best communicator to abort, but better than not returning.
         }
 #endif
@@ -587,8 +587,16 @@ void log_printf(logLevel level, const char* format, ...) {
       omp_unset_lock(&log_error_lock);
     }
     else {
+#ifdef SWIG
+#pragma omp critical
+      {
+        printf("%s", &msg_string[0]);
+        fflush(stdout);
+      }
+#else
       printf("%s", &msg_string[0]);
       fflush(stdout);
+#endif
     }
   }
 }

@@ -436,6 +436,26 @@ def load_openmc_mgxs_lib(mgxs_lib, geometry=None):
             py_printf('DEBUG', 'Loaded "fission" MGXS for "%s %d"',
                       domain_type, domain.id)
 
+        # Search for optional flux starting guess
+        if True: #'fluxes' in mgxs_lib.mgxs_types:
+            mgxs = mgxs_lib.get_mgxs(domain, 'fission')
+            #print(mgxs.tallies['flux'].filters['EnergyFilter'])
+            bins = np.array(mgxs.tallies['flux'].filters[1].bins)
+            widths = bins[:, 1] - bins[:, 0]
+            flux = mgxs.tallies['flux'].mean.flatten()
+            leth_widths = np.log(bins[:, 1]) - np.log(bins[:, 0])
+
+            import matplotlib.pyplot as plt
+            plt.figure()
+            plt.plot(np.log(bins[:, 1])/np.log(10), np.log(flux/leth_widths))
+            plt.savefig("MC_flux"+str(domain.id)+".png")
+
+            flux = mgxs.tallies['flux'].mean.flatten()
+            for g in range(num_groups):
+                material.setStartFluxByGroup(flux[num_groups - 1 - g], g+1)
+            py_printf('DEBUG', 'Loaded "flux guess" for "%s %d"',
+                      domain_type, domain.id)
+
     # Inform SWIG to garbage collect any old Materials from the Geometry
     for material_id in old_materials:
         old_materials[material_id].thisown = False

@@ -779,12 +779,25 @@ void Solver::initializeFSRs() {
   /* Allocate an array of Material pointers indexed by FSR */
   _FSR_materials = new Material*[_num_FSRs];
 
-  /* Loop over all FSRs to extract FSR material pointers */
-  for (long r=0; r < _num_FSRs; r++) {
+  /* Set FSR material pointers */
+  for (long r=0; r < _num_FSRs; r++)
     _FSR_materials[r] = _geometry->findFSRMaterial(r);
-    log_printf(DEBUG, "FSR ID = %d has Material ID = %d, volume = %f", r, 
-               _FSR_materials[r]->getId(), _FSR_volumes[r]);
+
+  /* Check volume, centroids and volume moments for debugging purposes */
+  double total_volume[4] = {0.0};
+  for (long r=0; r < _num_FSRs; r++) {
+    Point* centroid = _geometry->getFSRCentroid(r);
+    total_volume[0] += _FSR_volumes[r];
+    total_volume[1] += _FSR_volumes[r] * centroid->getX();
+    total_volume[2] += _FSR_volumes[r] * centroid->getY();
+    total_volume[3] += _FSR_volumes[r] * centroid->getZ();
+
+    log_printf(DEBUG, "FSR ID = %d has Material ID = %d, volume = %f, centroid"
+               " (%f %f %f)", r, _FSR_materials[r]->getId(), _FSR_volumes[r], 
+               centroid->getX(), centroid->getY(), centroid->getZ());
   }
+  log_printf(DEBUG, "Total volume %f cm3, moments of volume (%f %f %f)",
+             total_volume[0], total_volume[1], total_volume[2], total_volume[3]);
 }
 
 
@@ -1432,6 +1445,10 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
     flattenFSRFluxes(1.0);
   else
     flattenFSRFluxesChiSpectrum();
+
+  if (true)
+    initializeFluxesWithMaterialSpectrum();
+
   normalizeFluxes();
   storeFSRFluxes();
 
@@ -2142,6 +2159,19 @@ void Solver::printInputParamsSummary() {
   }
   else {
     log_printf(NORMAL, "CMFD acceleration: OFF");
+  }
+}
+
+
+void Solver::initializeFluxesWithMaterialSpectrum() {
+
+  log_printf(NORMAL, "Initializing fluxes with pre-loaded guess");
+
+  for (long r=0; r < _num_FSRs; r++) {
+    if (_FSR_materials[r]->isFluxGuessOn()) {
+      for(int g=0; g<_num_groups; g++)
+        _scalar_flux[r*_num_groups+g] = _FSR_materials[r]->getStartFluxByGroup(g);
+    }
   }
 }
 

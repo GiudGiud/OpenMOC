@@ -1036,6 +1036,8 @@ int TrackGenerator3D::getFirst2DTrackLinkIndex(TrackChainIndexes* tci,
   if (tci->_polar < _num_polar / 2) {
     z1 = _z_min + std::max(0., (lz - nl + 0.5)) * dz;
     z2 = _z_max + std::min(0., (lz - nz + 0.5)) * dz;
+    //if (z1 < 0.0001 && std::abs(x1 - _x_min) < 0.0001)
+    //  log_printf(NORMAL, "%f %f %f, p %d, zmin %f, lz %d nl %d dz %f, dl %f, l_start %f", x1, y1, z1, tci->_polar, _z_min, lz, nl, dz, dl, l_start);
   }
   else {
     z1 = _z_max + std::min(0., (lz - nz + 0.5)) * dz;
@@ -1090,6 +1092,14 @@ void TrackGenerator3D::set3DTrackData(TrackChainIndexes* tci,
   double x2 = track->getStart()->getX();
   double y2 = track->getStart()->getY();
   double z2 = track->getStart()->getZ();
+  //if (std::abs(x2) < 0.00001 && std::abs(y2) < 0.00001)
+  //  log_printf(NORMAL, "Start xyz %f %f %f", x2, y2, z2);
+  //if (std::abs(z2) < 0.00001 && std::abs(x2 - 10.70864) < 0.00001)
+  //  log_printf(NORMAL, "Start xyz %f %f %f", x2, y2, z2);
+  //if (std::abs(z2) < 0.00001 && std::abs(y2 + 10.70864) < 0.00001)
+  //  log_printf(NORMAL, "Start xyz %f %f %f", x2, y2, z2);
+  //if (std::abs(z2) < 0.00001 && std::abs(y2 - 10.70864) < 0.00001)
+  //  log_printf(NORMAL, "Start xyz %f %f %f", x2, y2, z2);
 
   /* Set the start and end point for each 3D track */
   while (!end_of_chain) {
@@ -1888,7 +1898,7 @@ void TrackGenerator3D::setLinkingTracks(TrackStackIndexes* tsi,
       tci_refl._polar = pc;
       tci_refl._lz    = nl + 2 * nz - lz - 1;
 
-      /* PERIODIC BC */
+      /* PERIODIC or INTERFACE BC */
       if (_geometry->getMaxZBoundaryType() == PERIODIC ||
           _geometry->getMaxZBoundaryType() == INTERFACE)
         tci_next._lz    = lz - nz;
@@ -2266,13 +2276,13 @@ void TrackGenerator3D::setLinkingTracks(TrackStackIndexes* tsi,
     else if (outgoing) {
 
       /* Set the link index */
-      tci_prdc._link = tci->_link + 1;
+      tci_prdc._link = tci->_link + 1;   /// ?????
       tci_next._link = tci->_link + 1;
       tci_refl._link = tci->_link + 1;
       tci_refl._azim  = ac;
 
       /* Set the next track */
-      if (track_2D->getBCFwd() != PERIODIC &&
+      if (track_2D->getBCFwd() != PERIODIC &&   //////////////////////
           track_2D->getBCFwd() != INTERFACE)
         tci_next._azim  = ac;
     }
@@ -2287,7 +2297,7 @@ void TrackGenerator3D::setLinkingTracks(TrackStackIndexes* tsi,
       tci_refl._azim  = ac;
 
       /* Set the next track */
-      if (track_2D->getBCBwd() != PERIODIC &&
+      if (track_2D->getBCBwd() != PERIODIC &&   /////////////////////////
           track_2D->getBCBwd() != INTERFACE)
         tci_next._azim  = ac;
     }
