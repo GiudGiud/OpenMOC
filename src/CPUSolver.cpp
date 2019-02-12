@@ -364,7 +364,9 @@ void CPUSolver::normalizeFluxes() {
  */
 void CPUSolver::computeFSRSources() {
 
-#pragma omp parallel default(none)
+  long num_negative_sources = 0;
+
+#pragma omp parallel default(none) shared(num_negative_sources)
   {
     int tid;
     Material* material;
@@ -401,12 +403,21 @@ void CPUSolver::computeFSRSources() {
         _reduced_sources(r,g) = _fixed_sources(r,g);
         _reduced_sources(r,g) += scatter_source + fission_source;
         _reduced_sources(r,g) *= ONE_OVER_FOUR_PI / sigma_t[g];
+
+        if (_reduced_sources(r,g) < 0) {
+#pragma omp atomic update
+          num_negative_sources++;
+          _reduced_sources(r,g) = 0.0;
+        }
       }
     }
 
     delete [] fission_sources;
     delete [] scatter_sources;
   }
+
+  if (num_negative_sources > 0)
+    log_printf(WARNING, "%d negative sources computed", num_negative_sources);
 }
 
 /**
