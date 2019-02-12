@@ -189,19 +189,6 @@ int Material::getNumEnergyGroups() const {
 
 
 /**
- * @brief Return the array of the Material's total cross-sections.
- * @return the pointer to the Material's array of total cross-sections
- */
-FP_PRECISION* Material::getSigmaT() {
-  if (_sigma_t == NULL)
-    log_printf(ERROR, "Unable to return Material %d's total "
-               "cross-section since it has not yet been set", _id);
-
-  return _sigma_t;
-}
-
-
-/**
  * @brief Return the maximum of the Material's total cross-sections.
  * @return the maximum of the Material's total cross-sections.
  */

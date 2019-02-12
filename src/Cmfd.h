@@ -525,10 +525,7 @@ inline int Cmfd::findCmfdSurfaceOTF(int cell_id, double z, int surface_2D) {
 inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
                                int azim_index, int polar_index, bool fwd) {
 
-  int surf_id, cell_id, cmfd_group;
-  int ncg = _num_cmfd_groups;
-  CMFD_PRECISION currents[_num_cmfd_groups] 
-       __attribute__ ((aligned(VEC_ALIGNMENT))) = {0.0};
+  int surf_id, cell_id;
 
   /* Check if the current needs to be tallied */
   bool tally_current = false;
@@ -545,6 +542,11 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
 
   /* Tally current if necessary */
   if (tally_current) {
+
+    int cmfd_group;
+    int ncg = _num_cmfd_groups;
+    CMFD_PRECISION currents[_num_cmfd_groups] 
+         __attribute__ ((aligned(VEC_ALIGNMENT))) = {0.0};
 
     int local_cell_id = getLocalCMFDCell(cell_id);
 

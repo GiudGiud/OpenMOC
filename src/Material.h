@@ -159,5 +159,17 @@ public:
   void printString();
 };
 
+/**
+ * @brief Return the array of the Material's total cross-sections.
+ * @return the pointer to the Material's array of total cross-sections
+ */
+inline FP_PRECISION* Material::getSigmaT() {
+  //if (_sigma_t == NULL)
+  //  log_printf(ERROR, "Unable to return Material %d's total "
+  //             "cross-section since it has not yet been set", _id);
+
+  return _sigma_t;
+}
+
 
 #endif /* MATERIAL_H_ */

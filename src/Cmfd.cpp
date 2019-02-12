@@ -47,7 +47,7 @@ Cmfd::Cmfd() {
   _tallies_allocated = false;
   _domain_communicator_allocated = false;
   _linear_source = false;
-  _check_neutron_balance = true;  //////////////
+  _check_neutron_balance = false;  //////////////
   _old_dif_surf_valid = false;
 
   _non_uniform = false;
