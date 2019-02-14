@@ -782,22 +782,6 @@ void Solver::initializeFSRs() {
   /* Set FSR material pointers */
   for (long r=0; r < _num_FSRs; r++)
     _FSR_materials[r] = _geometry->findFSRMaterial(r);
-
-  /* Check volume, centroids and volume moments for debugging purposes */
-  double total_volume[4] = {0.0};
-  for (long r=0; r < _num_FSRs; r++) {
-    Point* centroid = _geometry->getFSRCentroid(r);
-    total_volume[0] += _FSR_volumes[r];
-    total_volume[1] += _FSR_volumes[r] * centroid->getX();
-    total_volume[2] += _FSR_volumes[r] * centroid->getY();
-    total_volume[3] += _FSR_volumes[r] * centroid->getZ();
-
-    log_printf(DEBUG, "FSR ID = %d has Material ID = %d, volume = %f, centroid"
-               " (%f %f %f)", r, _FSR_materials[r]->getId(), _FSR_volumes[r], 
-               centroid->getX(), centroid->getY(), centroid->getZ());
-  }
-  log_printf(DEBUG, "Total volume %f cm3, moments of volume (%f %f %f)",
-             total_volume[0], total_volume[1], total_volume[2], total_volume[3]);
 }
 
 
@@ -1446,8 +1430,8 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
   else
     flattenFSRFluxesChiSpectrum();
 
-  if (true)
-    initializeFluxesWithMaterialSpectrum();
+  //if (true)
+  //  initializeFluxesWithMaterialSpectrum();
 
   normalizeFluxes();
   storeFSRFluxes();
@@ -1645,6 +1629,9 @@ void Solver::printTimerReport() {
   msg_string.resize(53, '.');
   log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), transport_sweep);
 
+  double transfer_time = 0.;
+  double idle_time = 0.;
+#ifdef MPIx
   /* Boundary track angular fluxes transfer */
   double transfer_time = _timer->getSplit("Total transfer time");
   msg_string = "    Angular Flux Transfer";
@@ -1668,6 +1655,7 @@ void Solver::printTimerReport() {
   msg_string = "    Total Idle Time Between Sweeps";
   msg_string.resize(53, '.');
   log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), idle_time);
+#endif
 
   /* CMFD acceleration time */
   if (_cmfd != NULL)

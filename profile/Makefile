@@ -93,7 +93,7 @@ non-uniform-lattice/non-uniform-lattice.cpp \
 # Sets Flags
 #===============================================================================
 
-CFLAGS = -std=gnu++0x #-g #-fsanitize=address -fno-omit-frame-pointer
+CFLAGS = -std=gnu++0x -fomit-frame-pointer
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)

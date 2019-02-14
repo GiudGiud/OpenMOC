@@ -2051,8 +2051,6 @@ void CPUSolver::transferBoundaryFlux(Track* track,
     memcpy(track_out_flux, track_flux, _fluxes_per_track * sizeof(float));
   }
   /* For vacuum boundary conditions, losing the flux is enough */
-  if (bc_out == VACUUM)
-    memset(track_flux, 0, _fluxes_per_track * sizeof(float));
 
   /* Tally leakage if applicable */
   if (_cmfd == NULL) {

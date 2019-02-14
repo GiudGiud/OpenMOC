@@ -18,7 +18,7 @@ TrackGenerator::TrackGenerator(Geometry* geometry, int num_azim,
   _contains_2D_tracks = false;
   _contains_2D_segments = false;
   _quadrature = NULL;
-  _z_coord = 0;
+  _z_coord = 0.;
   _segment_formation = EXPLICIT_2D;
   _max_optical_length = std::numeric_limits<FP_PRECISION>::max();
   _max_num_segments = 0;
@@ -1195,12 +1195,13 @@ void TrackGenerator::segmentize() {
                    "may be missing.");
 
       /* Re-initialize CMFD lattice with 2D dimensions */
+      log_printf(NORMAL, "here");
       cmfd->setWidthZ(std::numeric_limits<double>::infinity());
       Point offset;
       offset.setX(cmfd->getLattice()->getOffset()->getX());
       offset.setY(cmfd->getLattice()->getOffset()->getY());
-      offset.setZ(0.0);
-      cmfd->initializeLattice(&offset);
+      offset.setZ(_z_coord);
+      cmfd->initializeLattice(&offset, true);
     }
   }
 

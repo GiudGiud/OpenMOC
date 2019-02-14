@@ -571,32 +571,21 @@ void log_printf(logLevel level, const char* format, ...) {
     /* Write the log message to the shell */
     if (level == ERROR) {
       omp_set_lock(&log_error_lock);
-      {
 #ifdef MPIx
         if (_MPI_present) {
           printf("%s", "[  ERROR  ]  ");
           printf("%s", &msg_string[0]);
           fflush(stdout);
           MPI_Abort(_MPI_comm, 0);
-          MPI_Finalize();
           //FIXME Not best communicator to abort, but better than not returning.
         }
 #endif
-        throw std::logic_error(msg_string.c_str());
-      }
       omp_unset_lock(&log_error_lock);
+      throw std::logic_error(&msg_string[0]);
     }
     else {
-#ifdef SWIG
-#pragma omp critical
-      {
-        printf("%s", &msg_string[0]);
-        fflush(stdout);
-      }
-#else
       printf("%s", &msg_string[0]);
       fflush(stdout);
-#endif
     }
   }
 }

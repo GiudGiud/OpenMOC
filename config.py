@@ -161,9 +161,9 @@ class configuration:
     compiler_flags = dict()
 
     compiler_flags['gcc'] = ['-c', '-O3', '-ffast-math', '-fopenmp',
-                             '-std=c++11', '-fpic', '-march=native', '-DNGROUPS=70']  #'-fopt-info-all'
+                             '-std=c++11', '-fpic']#, '-march=native']
     compiler_flags['mpicc'] = ['-c', '-O3', '-ffast-math', '-fopenmp',
-                               '-std=c++11', '-fpic', '-march=native', '-DNGROUPS=70']
+                               '-std=c++11', '-fpic', '-march=native']
     compiler_flags['clang'] = ['-c', '-O3', '-ffast-math', '-std=c++11',
                                '-fopenmp', '-fvectorize', '-fpic',
                                '-Qunused-arguments',
@@ -361,7 +361,7 @@ class configuration:
     # set CMFD precision and linear algebra solver tolerance
     for compiler in macros:
         for precision in macros[compiler]:
-            macros[compiler][precision].append(('CMFD_PRECISION', 'float'))
+            macros[compiler][precision].append(('CMFD_PRECISION', 'double'))
             macros[compiler][precision].append(('LINALG_TOL', 1E-15))
 
 

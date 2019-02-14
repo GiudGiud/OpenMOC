@@ -412,4 +412,3 @@ if "clean" in sys.argv:
     install_location = site.getusersitepackages()
     print("Removing build from "+ install_location)
     os.system("rm -rf " + install_location + "/*openmoc*")
-

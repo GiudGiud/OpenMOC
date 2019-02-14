@@ -3006,12 +3006,16 @@ void Geometry::initializeCmfd() {
   _cmfd->setWidthX(max_x - min_x);
   _cmfd->setWidthY(max_y - min_y);
   _cmfd->setWidthZ(max_z - min_z);
+  log_printf(NODAL, "Widths z %f", max_z - min_z);
 
   /* Initialize the CMFD lattice */
   Point offset;
   offset.setX(min_x + (max_x - min_x)/2.0);
   offset.setY(min_y + (max_y - min_y)/2.0);
-  offset.setZ(min_z + (max_z - min_z)/2.0);
+  if (std::abs(min_z + (max_z - min_z)/2.0) < FLT_INFINITY)
+    offset.setZ(min_z + (max_z - min_z)/2.0);
+  else
+    offset.setZ(0.);
 
   _cmfd->initializeLattice(&offset);
 
@@ -3917,7 +3921,7 @@ void Geometry::loadFromFile(std::string filename, bool non_uniform_lattice,
 
     /* Set starting spectrum guess */
     for (int g=0; g < num_groups; g++) {
-      ret = twiddleRead(&value, sizeof(double), 1, in);
+      //ret = twiddleRead(&value, sizeof(double), 1, in);
       mat->setStartFluxByGroup(value, g+1);
     }
   }
