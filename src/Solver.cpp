@@ -1633,7 +1633,7 @@ void Solver::printTimerReport() {
   double idle_time = 0.;
 #ifdef MPIx
   /* Boundary track angular fluxes transfer */
-  double transfer_time = _timer->getSplit("Total transfer time");
+  transfer_time = _timer->getSplit("Total transfer time");
   msg_string = "    Angular Flux Transfer";
   msg_string.resize(53, '.');
   log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), transfer_time);
@@ -1651,7 +1651,7 @@ void Solver::printTimerReport() {
   log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), comm_time);
 
   /* Idle time between transport sweep and angular fluxes transfer */
-  double idle_time = _timer->getSplit("Idle time");
+  idle_time = _timer->getSplit("Idle time");
   msg_string = "    Total Idle Time Between Sweeps";
   msg_string.resize(53, '.');
   log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), idle_time);

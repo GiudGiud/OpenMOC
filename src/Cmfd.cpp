@@ -1216,7 +1216,7 @@ double Cmfd::computeKeff(int moc_iteration) {
   if (isFluxUpdateOn() && moc_iteration > -1)
     updateMOCFlux();
 
-  //printProlongationFactors(moc_iteration);
+  printProlongationFactors(moc_iteration);
 
   /* Tally the update and total CMFD time */
   _timer->stopTimer();
@@ -2398,7 +2398,7 @@ void Cmfd::getEdgeSplitSurfaces(int cell, int edge,
         //  log_printf(NODAL, "Cell %d : SPLIT to cell %d other surf (added) %d", cell, cell_next, other_surface);
         surfaces->push_back(cell_next * ns + other_surface);
 
-        /* Remove the split if it's going to be reflected */
+        /* Remove the split if it's going to be reflected */  //DOESNT MATTER THAT CURRENT IS INGNOED
         int other_i;
         for (other_i=0; other_i < 3; other_i++)
           if (direction[other_i] != 0 && other_i != i)
@@ -2415,6 +2415,18 @@ void Cmfd::getEdgeSplitSurfaces(int cell, int edge,
           //surfaces->push_back(cell * ns + other_surface);
 
           }
+
+        /* Move split if it's going indirectly to vacuum */
+        for (other_i=0; other_i < 3; other_i++)
+          if (direction[other_i] != 0 && other_i != i)
+            break;
+        if (((cell_indexes[other_i] == 0 && direction[other_i] == -1) ||
+            (cell_indexes[other_i] == cell_limits[other_i] - 1 &&
+             direction[other_i] == +1)) && _boundaries[other_surface] == VACUUM) {
+          surfaces->pop_back();
+          surfaces->pop_back();
+          surfaces->push_back(cell * ns + other_surface);
+        }
       }
       ind++;
     }
@@ -3785,8 +3797,10 @@ void Cmfd::initializeLattice(Point* offset, bool is_2D) {
   _lattice->setNumY(_num_y);
   _lattice->setNumZ(_num_z);
 
-  _lattice->setWidth(_cell_width_x, _cell_width_y, _cell_width_z);
-
+  if (!_non_uniform)
+    _lattice->setWidth(_cell_width_x, _cell_width_y, _cell_width_z);
+  else
+    _lattice->setWidths(_cell_widths_x, _cell_widths_y, _cell_widths_z);
   _lattice->setOffset(offset->getX(), offset->getY(), offset->getZ());
 
   _lattice->computeSizes();
