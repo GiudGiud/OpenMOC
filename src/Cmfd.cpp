@@ -819,6 +819,8 @@ void Cmfd::collapseXS() {
           double rxn_tally_group = 0.0;
           double trans_tally_group = 0.0;
 
+          if (i==7969 && e==27)
+            log_printf(NORMAL, "%d", i);
           /* Loop over FSRs in CMFD cell */
           for (iter = _cell_fsrs.at(i).begin();
                iter != _cell_fsrs.at(i).end(); ++iter) {
@@ -836,6 +838,9 @@ void Cmfd::collapseXS() {
             nu_fission_tally += nu_fis * flux * volume;
             _reaction_tally[i][e] += flux * volume;
             _volume_tally[i][e] += volume;
+
+            //if (i==7969 && e==27)
+            //  log_printf(NORMAL, "%d : %f %f",*iter, volume, flux);
 
             /* Increment diffusion MOC group-wise tallies */
             rxn_tally_group += flux * volume;
@@ -862,11 +867,15 @@ void Cmfd::collapseXS() {
         double rxn_tally = _reaction_tally[i][e];
 
         if (rxn_tally < FLT_EPSILON) {
-          log_printf(WARNING, "Negative or zero reaction tally calculated in "
-                     "CMFD cell %d in CMFD group %d", i, e);
+          int x = (i % (_local_num_x * _local_num_y)) % _local_num_x;
+          int y = (i % (_local_num_x * _local_num_y)) / _local_num_x;
+          int z = i / (_local_num_x * _local_num_y);
+          log_printf(NODAL, "Negative or zero reaction tally calculated in "
+                     "CMFD cell %d (%d %d %d) in CMFD group %d", i, x, y, z, e);
           rxn_tally = ZERO_SIGMA_T;
           _reaction_tally[i][e] = ZERO_SIGMA_T;
           _diffusion_tally[i][e] = ZERO_SIGMA_T;
+          //abort();
         }
 
         cell_material->setSigmaTByGroup(total_tally / rxn_tally, e + 1);
@@ -3736,11 +3745,12 @@ void Cmfd::initializeLattice(Point* offset, bool is_2D) {
 
   /* 2D case, set the axial width 1.0 and number of cells to 1 */
   if (is_2D || _width_z == std::numeric_limits<double>::infinity()) {
-    setNumZ(1);
     _width_z = 1.0;
+    _num_z = 1;
     _local_num_z = 1;
     _cell_width_z = 1.0;
     _cell_widths_z.resize(_num_z, _cell_width_z);
+    _cell_widths_z[0] = 1.0;
     log_printf(NORMAL, "2D!!!");
     setBoundary(SURFACE_Z_MIN, REFLECTIVE);
     setBoundary(SURFACE_Z_MAX, REFLECTIVE);
@@ -3771,8 +3781,10 @@ void Cmfd::initializeLattice(Point* offset, bool is_2D) {
   for(int i=0; i<_num_y; i++)
     _accumulate_y[i+1] = _accumulate_y[i] + _cell_widths_y[i];
 
-  for(int i=0; i<_num_z; i++)
+  for(int i=0; i<_num_z; i++) {
     _accumulate_z[i+1] = _accumulate_z[i] + _cell_widths_z[i];
+    //log_printf(NORMAL, "%d %f", i , _accumulate_z[i+1], _cell_widths_z[i]);
+  }
 
   if(fabs(_width_x - _accumulate_x[_num_x]) > FLT_EPSILON ||
      fabs(_width_y - _accumulate_y[_num_y]) > FLT_EPSILON ||

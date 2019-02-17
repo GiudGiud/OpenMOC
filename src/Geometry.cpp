@@ -3006,7 +3006,6 @@ void Geometry::initializeCmfd() {
   _cmfd->setWidthX(max_x - min_x);
   _cmfd->setWidthY(max_y - min_y);
   _cmfd->setWidthZ(max_z - min_z);
-  log_printf(NODAL, "Widths z %f", max_z - min_z);
 
   /* Initialize the CMFD lattice */
   Point offset;

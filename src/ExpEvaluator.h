@@ -170,7 +170,12 @@ inline FP_PRECISION ExpEvaluator::computeExponential(FP_PRECISION tau,
   FP_PRECISION exp_F1;
 
   /* Limit lower range of tau for numerical precision reasons */
-  tau = std::max(FP_PRECISION(1e-5), tau);
+  tau = std::max(FP_PRECISION(4e-5), tau);
+
+  //if (tau * inv_sin_theta > 10)
+  //  log_printf(NORMAL, "Too big %f", tau);
+
+  //tau = std::min(FP_PRECISION(10)/inv_sin_theta, tau);
 
   expF1_fractional(tau * inv_sin_theta, &exp_F1);
 

@@ -1565,6 +1565,10 @@ void CPUSolver::computeFSRSources(int iteration) {
         _reduced_sources(r,G) += _fixed_sources(r,G);
       _reduced_sources(r,G) *= ONE_OVER_FOUR_PI;
 
+      //if (G==27 && (r == 10659 or r == 6987))
+      //  log_printf(NODAL, "%d %f %f %f : %f %f", r, fission_source * chi[G], scatter_source, _reduced_sources(r,G), 
+       //            _scalar_flux(r,G), sigma_s[G * _num_groups+G]);
+
       /* Correct negative sources to (near) zero */
       if (_reduced_sources(r,G) < 0.0) {
 #pragma omp atomic
@@ -1932,7 +1936,7 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment,
 
 #pragma omp simd aligned(tau)
     for (int pe=0; pe < num_polar_2 * _num_groups; pe++)
-      tau[pe] = sigma_t[pe % _num_groups] * length;
+      tau[pe] = std::min(FP_PRECISION(10), sigma_t[pe % _num_groups] * length);
 
     FP_PRECISION delta_psi[_num_groups * num_polar_2] 
                  __attribute__ ((aligned(VEC_ALIGNMENT)));
@@ -2082,8 +2086,19 @@ void CPUSolver::addSourceToScalarFlux() {
     sigma_t = _FSR_materials[r]->getSigmaT();
 
     for (int e=0; e < _num_groups; e++) {
+
+      //if (e==27 && (r==6987 || r==10659))
+      //  log_printf(NORMAL, "%d %f %f %f", r, _scalar_flux(r, e), sigma_t[e], _reduced_sources(r, e));
+
+
       _scalar_flux(r, e) /= (sigma_t[e] * volume);
+
       _scalar_flux(r, e) += FOUR_PI * _reduced_sources(r, e) / sigma_t[e];
+
+      //if (e==27 && (r==6987 || r==10659))
+      //  log_printf(NORMAL, "%d %f", r, _scalar_flux(r, e));
+
+
       if (_scalar_flux(r, e) < 0.0) {
         _scalar_flux(r, e) = 1.0e-20;
 #pragma omp atomic update
