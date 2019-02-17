@@ -2423,9 +2423,9 @@ void Cmfd::getEdgeSplitSurfaces(int cell, int edge,
         if (((cell_indexes[other_i] == 0 && direction[other_i] == -1) ||
             (cell_indexes[other_i] == cell_limits[other_i] - 1 &&
              direction[other_i] == +1)) && _boundaries[other_surface] == VACUUM) {
-          surfaces->pop_back();
-          surfaces->pop_back();
-          surfaces->push_back(cell * ns + other_surface);
+          //surfaces->pop_back();
+          //surfaces->pop_back();
+          //surfaces->push_back(cell * ns + other_surface);
         }
       }
       ind++;
