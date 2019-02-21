@@ -1225,7 +1225,7 @@ double Cmfd::computeKeff(int moc_iteration) {
   if (isFluxUpdateOn() && moc_iteration > -1)
     updateMOCFlux();
 
-  printProlongationFactors(moc_iteration);
+  //printProlongationFactors(moc_iteration);
 
   /* Tally the update and total CMFD time */
   _timer->stopTimer();
