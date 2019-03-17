@@ -5,9 +5,9 @@ import openmoc
 ###############################################################################
 
 opts = openmoc.options.Options()
-num_modes = 5
+num_modes = 1
 
-openmoc.log.set_log_level('NORMAL')
+openmoc.log.set_log_level('INFO')
 openmoc.log.py_printf('TITLE', 'Computing %d forward eigenmodes', num_modes)
 
 
@@ -20,7 +20,7 @@ openmoc.log.py_printf('NORMAL', 'Initializing the track generator...')
 from geometry import geometry
 track_generator = openmoc.TrackGenerator(geometry, opts.num_azim,
                                          opts.azim_spacing)
-track_generator.setNumThreads(opts.num_omp_threads)
+track_generator.setNumThreads(1)#opts.num_omp_threads)
 track_generator.generateTracks()
 
 
@@ -31,7 +31,8 @@ track_generator.generateTracks()
 # Initialize a CPUSolver to perform forward fixed source calculations
 cpu_solver = openmoc.CPUSolver(track_generator)
 cpu_solver.setNumThreads(opts.num_omp_threads)
-
+cpu_solver.computeEigenvalue(2000)
+stop
 # Initialize IRAMSolver to perform forward eigenmode calculation
 iram_solver = openmoc.krylov.IRAMSolver(cpu_solver)
 iram_solver.computeEigenmodes(num_modes=num_modes, solver_mode=openmoc.FORWARD)

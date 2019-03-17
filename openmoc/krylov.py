@@ -213,6 +213,7 @@ class IRAMSolver(object):
         else:
             py_printf('INFO', "Performed A operator sweep number %d", self._a_count)
 
+        print(len(flux[flux>0]))
         # Return flux residual
         return flux_old - flux
 
@@ -244,7 +245,9 @@ class IRAMSolver(object):
         self._moc_solver.fissionTransportSweep()
         flux = self._moc_solver.getFluxes(self._op_size)
 
+        print(len(flux[flux>0]))
         py_printf('NORMAL', "Performed M operator sweep number %d", self._m_count)
+
 
         # Return new flux
         return flux
@@ -274,13 +277,13 @@ class IRAMSolver(object):
 
         # Solve AX=B fixed scatter source problem using Krylov subspace method
         if self._inner_method == 'gmres':
-            flux, x = linalg.gmres(self._A_op, flux, tol=self._inner_tol)
+            flux, x = linalg.gmres(self._A_op, b=flux, tol=self._inner_tol)
         elif self._inner_method == 'lgmres':
-            flux, x = linalg.lgmres(self._A_op, flux, tol=self._inner_tol)
+            flux, x = linalg.lgmres(self._A_op, b=flux, tol=self._inner_tol)
         elif self._inner_method == 'bicgstab':
-            flux, x = linalg.bicgstab(self._A_op, flux, tol=self._inner_tol)
+            flux, x = linalg.bicgstab(self._A_op, b=flux, tol=self._inner_tol)
         elif self._inner_method == 'cgs':
-            flux, x = linalg.cgs(self._A_op, flux, tol=self._inner_tol)
+            flux, x = linalg.cgs(self._A_op, b=flux, tol=self._inner_tol)
         else:
             py_printf('ERROR', 'Unable to use %s to solve Ax=b', self._inner_method)
 

@@ -262,6 +262,8 @@ void CPUSolver::copyBoundaryFluxes() {
       for (int p=0; p < _num_polar_2; p++) {
         for (int e=0; e < _num_groups; e++) {
           _boundary_flux(t, d, p, e) = _start_flux(t, d, p, e);
+          if (std::abs(_start_flux(t, d, p, e)) > 0)
+            log_printf(WARNING, "big probl start flux");
         }
       }
     }
@@ -456,6 +458,8 @@ void CPUSolver::computeFSRFissionSources() {
         /* Compute total (fission) reduced source */
         _reduced_sources(r,g) = fission_source;
         _reduced_sources(r,g) *= ONE_OVER_FOUR_PI / sigma_t[g];
+        if (_reduced_sources(r,g) < 0 and g==0 and r==12000)
+          log_printf(NORMAL, "r %d WUT %e and %f", r, _reduced_sources(r,g), _scalar_flux(r,g));
       }
     }
 
@@ -499,6 +503,8 @@ void CPUSolver::computeFSRScatterSources() {
         /* Compute total (scatter) reduced source */
         _reduced_sources(r,g) = scatter_source;
         _reduced_sources(r,g) *= ONE_OVER_FOUR_PI / sigma_t[g];
+       // if (_reduced_sources(r,g) < 0)
+       //   log_printf(NORMAL, "WUT sc");
       }
     }
 
@@ -812,6 +818,7 @@ void CPUSolver::addSourceToScalarFlux() {
 
   FP_PRECISION volume;
   FP_PRECISION* sigma_t;
+  long num_neg = 0;
 
   /* Add in source term and normalize flux to volume for each FSR */
   /* Loop over FSRs, energy groups */
@@ -823,8 +830,15 @@ void CPUSolver::addSourceToScalarFlux() {
     for (int e=0; e < _num_groups; e++) {
       _scalar_flux(r,e) /= (sigma_t[e] * volume);
       _scalar_flux(r,e) += (FOUR_PI * _reduced_sources(r,e));
+
+      if (_scalar_flux(r,e) < 0.0){
+#pragma omp atomic update
+        num_neg++;
+      }
     }
   }
+  if (num_neg > 0)
+    log_printf(WARNING, "Computed %d neg fluxes", num_neg);
 }
 
 
