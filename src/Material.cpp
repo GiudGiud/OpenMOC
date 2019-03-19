@@ -561,7 +561,7 @@ void Material::setNumEnergyGroups(const int num_groups) {
   }
 
   /* Allocate memory for data arrays */
-  _sigma_t = (FP_PRECISION*) aligned_alloc(VEC_ALIGNMENT,
+  _sigma_t = (FP_PRECISION*) memalign(VEC_ALIGNMENT,
                                            _num_groups*sizeof(FP_PRECISION));
   _sigma_f = new FP_PRECISION[_num_groups];
   _nu_sigma_f = new FP_PRECISION[_num_groups];

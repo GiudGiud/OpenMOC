@@ -13,6 +13,7 @@
 #include "log.h"
 #include "Quadrature.h"
 #include <math.h>
+#include <malloc.h>
 #include "exponentials.h"
 #endif
 
