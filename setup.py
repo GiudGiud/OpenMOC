@@ -2,7 +2,7 @@
 The setup script for OpenMOC
 '''
 
-import os, string
+import os, sys, string
 from distutils.errors import DistutilsOptionError
 import distutils.ccompiler
 import multiprocessing
@@ -64,6 +64,7 @@ class custom_install(install):
     ('with-cuda', None, "Build openmoc.cuda module for NVIDIA GPUs"),
     ('debug-mode', None, "Build with debugging symbols"),
     ('profile-mode', None, "Build with profiling symbols"),
+    ('coverage-mode', None, "Build with coverage symbols"),
     ('with-ccache', None, "Build with ccache for rapid recompilation"),
   ]
 
@@ -74,6 +75,7 @@ class custom_install(install):
   # Set some compile options to be boolean switches
   boolean_options = ['debug-mode',
                      'profile-mode',
+                     'coverage-mode',
                      'with-ccache']
 
   # Include all of the boolean options provided by distutils for the
@@ -103,6 +105,7 @@ class custom_install(install):
     self.with_cuda = False
     self.debug_mode = False
     self.profile_mode = False
+    self.coverage_mode = False
     self.with_ccache = False
 
 
@@ -125,6 +128,7 @@ class custom_install(install):
     config.with_cuda = self.with_cuda
     config.debug_mode = self.debug_mode
     config.profile_mode = self.profile_mode
+    config.coverage_mode = self.coverage_mode
     config.with_ccache = self.with_ccache
 
     # Check that the user specified a supported C++ compiler
@@ -313,7 +317,7 @@ def parallel_compile(self, sources, output_dir=None, macros=None,
       self._compile(obj, src, ext, cc_args, extra_postargs, pp_opts)
 
   # Convert thread mapping to C/C++/CUDA objects to a list and return
-  list(pool.ThreadPool(num_cpus).imap(_single_compile, objects))
+  list(pool.ThreadPool(num_cpus).map(_single_compile, objects))
   return objects
 
 
@@ -376,6 +380,7 @@ dist = setup(name = 'openmoc',
 
 # Rerun the build_py to setup links for C++ extension modules created by SWIG
 # This prevents us from having to install twice
-build_py = build_py(dist)
-build_py.ensure_finalized()
-build_py.run()
+if "build" in sys.argv or "install" in sys.argv:
+    build_py = build_py(dist)
+    build_py.ensure_finalized()
+    build_py.run()
