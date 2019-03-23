@@ -28,8 +28,8 @@ CMFD_PRECISION ?= single
 #case = models/simple-lattice/simple-lattice-3d.cpp
 #case = models/homogeneous/homogeneous.cpp
 #case = models/non-uniform-lattice/non-uniform-lattice.cpp
-case ?= models/run_time_standard/run_time_standard.cpp
-#case ?= models/assembly_1/load-assembly.cpp
+#case ?= models/run_time_standard/run_time_standard.cpp
+case ?= models/assembly_1/load-assembly.cpp
 #case ?= models/core/load-core.cpp
 
 source = \
@@ -93,7 +93,7 @@ non-uniform-lattice/non-uniform-lattice.cpp \
 # Sets Flags
 #===============================================================================
 
-CFLAGS = -std=gnu++0x
+CFLAGS = -std=gnu++0x -fno-tree-vectorize
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)

@@ -19,11 +19,11 @@
 
 
 /** Indexing macro for the scalar flux in each FSR and energy group */
-#define _scalar_flux_xyz(r,e,x) (_scalar_flux_xyz[(r)*_num_groups*3 + (x)*_num_groups + (e)])
+#define _scalar_flux_xyz(r,e,x) (_scalar_flux_xyz[(r)*_num_groups*3 + (e)*3 + (x)])
 
 /** Indexing macro for the total source divided by the total cross-section
  *  (\f$ \frac{Q}{\Sigma_t} \f$) in each FSR and energy group */
-#define _reduced_sources_xyz(r,e,x) (_reduced_sources_xyz[(r)*_num_groups*3 + (x)*_num_groups + (e)])
+#define _reduced_sources_xyz(r,e,x) (_reduced_sources_xyz[(r)*_num_groups*3 + (e)*3 + (x)])
 
 /** Indexing macro for the stabilizing scalar flux moments in each FSR and
  *  energy group */

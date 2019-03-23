@@ -168,16 +168,12 @@ inline FP_PRECISION ExpEvaluator::getInverseSinTheta() {
 inline FP_PRECISION ExpEvaluator::computeExponential(FP_PRECISION tau,
                                                      int polar_offset) {
 
-#ifndef THREED
-  FP_PRECISION inv_sin_theta = 1.f / _quadrature->getSinThetaInline(_azim_index,
-                                                   _polar_index + polar_offset);
-#else
-  FP_PRECISION inv_sin_theta = _inverse_sin_theta_no_offset;
-#endif
-  FP_PRECISION exp_F1;
-  expF1_fractional(tau * inv_sin_theta, &exp_F1);
 
-  return inv_sin_theta * exp_F1;
+  int exp_index = getExponentialIndex(tau);
+  FP_PRECISION dt = getDifference(exp_index, tau);
+  FP_PRECISION dt2 = dt * dt;
+
+  return computeExponentialF1(exp_index, polar_offset, dt, dt2);
 }
 
 
@@ -359,42 +355,43 @@ inline void ExpEvaluator::retrieveExponentialComponents(FP_PRECISION tau,
 
 
 #ifndef THREED
-  FP_PRECISION inv_sin_theta = 1.f / _quadrature->getSinThetaInline(_azim_index,
-                                                   _polar_index + polar_offset);
+ // FP_PRECISION inv_sin_theta = 1.f / _quadrature->getSinThetaInline(_azim_index,
+ //                                                  _polar_index + polar_offset);
 #else
-  FP_PRECISION inv_sin_theta = _inverse_sin_theta_no_offset;
+ // FP_PRECISION inv_sin_theta = _inverse_sin_theta_no_offset;
 #endif
 
-  /* Limit range of tau to avoid numerical errors */
-  tau = std::max(FP_PRECISION(1e-8), tau * inv_sin_theta);
+ //  Limit range of tau to avoid numerical errors 
+ // tau = std::max(FP_PRECISION(1e-8), tau * inv_sin_theta);
 
   /* Compute exponentials from a common exponential */
-   FP_PRECISION exp_G;
-   expG_fractional(tau, &exp_G);
-   *exp_F1 = 1.f - tau*exp_G;
-   *exp_F1 *= inv_sin_theta;
+  // FP_PRECISION exp_G;
+  // expG_fractional(tau, &exp_G);
+  // *exp_F1 = 1.f - tau*exp_G;
+  // *exp_F1 *= inv_sin_theta;
 
-   exp_G *= inv_sin_theta;
-   *exp_F2 = 2.f*exp_G - *exp_F1;
-   *exp_F2 *= inv_sin_theta;
+ //  exp_G *= inv_sin_theta;
+ //  *exp_F2 = 2.f*exp_G - *exp_F1;
+  // *exp_F2 *= inv_sin_theta;
 
-   *exp_H = *exp_F1 - exp_G;
+//   *exp_H = *exp_F1 - exp_G;
+
 
     /* Quadratic exponential interpolation tables */
-//     __builtin_assume_aligned(_exp_table, VEC_ALIGNMENT);
-// 
-//     tau /= inv_sin_theta;
-//     int exp_index = getExponentialIndex(tau);
-//     FP_PRECISION dt = getDifference(exp_index, tau);
-//     FP_PRECISION dt2 = dt * dt;
-//     int full_index = (exp_index * _num_polar_terms + polar_offset)
-//       * _num_exp_terms;
-//     *exp_F1 = _exp_table[full_index] + _exp_table[full_index + 1] * dt +
-//         _exp_table[full_index + 2] * dt2;
-//     *exp_F2 = _exp_table[full_index + 3] + _exp_table[full_index + 4] * dt +
-//         _exp_table[full_index + 5] * dt2;
-//     *exp_H = _exp_table[full_index + 6] + _exp_table[full_index + 7] * dt +
-//         _exp_table[full_index + 8] * dt2;
+     __builtin_assume_aligned(_exp_table, VEC_ALIGNMENT);
+ 
+     //tau /= inv_sin_theta;
+     int exp_index = getExponentialIndex(tau);
+     FP_PRECISION dt = getDifference(exp_index, tau);
+     FP_PRECISION dt2 = dt * dt;
+     int full_index = (exp_index * _num_polar_terms + polar_offset)
+       * _num_exp_terms;
+     *exp_F1 = _exp_table[full_index] + _exp_table[full_index + 1] * dt +
+         _exp_table[full_index + 2] * dt2;
+     *exp_F2 = _exp_table[full_index + 3] + _exp_table[full_index + 4] * dt +
+         _exp_table[full_index + 5] * dt2;
+     *exp_H = _exp_table[full_index + 6] + _exp_table[full_index + 7] * dt +
+         _exp_table[full_index + 8] * dt2;
 }
 
 
