@@ -204,6 +204,10 @@ private:
   /* Function to find the cell containing the coordinates */
   Cell* findFirstCell(LocalCoords* coords, double azim, double polar=M_PI_2);
 
+  /** A map of FSR ids to cells */
+  std::map<int, Cell*> map_FSR_to_cells;
+  std::map<std::string, int> _surface_map;
+
 public:
 
   Geometry();
@@ -349,6 +353,13 @@ public:
   size_t twiddleRead(boundaryType* ptr, size_t size, size_t nmemb, FILE* stream);
   size_t twiddleRead(double* ptr, size_t size, size_t nmemb, FILE* stream);
   size_t twiddleRead(long* ptr, size_t size, size_t nmemb, FILE* stream);
+
+  /* Functions for equivalence */
+  void matchFSRstoCells();
+  std::map<int,Cell*>* getMapFSRstoCells();
+  std::map<std::string,int>* getSurfaceMap();
+  void fillSurfaceMap(std::string cell_couple, int surface_index);
+  int findAxialIndexInExtrudedFSR(ExtrudedFSR* ext_fsr, double height);
 };
 
 #endif /* GEOMETRY_H_ */

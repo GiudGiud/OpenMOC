@@ -423,6 +423,32 @@ protected:
   /* Whether to ray-trace and propagate fluxes at the same time */
   bool _OTF_transport;
 
+///////////////
+  double _start_keff;
+
+  /* Maps needed for equivalence factors */
+  std::map<int,Cell*>* _fsr_to_cells;
+  std::map<std::string,int>* _surface_map;
+
+  /* Whether to use discontinuity factors */
+  int _use_DF;
+
+  /* Which iteration to start using DFs */
+  int _start_DF;
+
+  /* Array for reference currents */
+  std::vector< std::vector< FP_PRECISION> > _reference_currents;
+
+  /* Array for currents tallied in simulation */
+  std::vector< std::vector< FP_PRECISION> > _tallied_currents;
+
+  /* Array for discontinuity factors */
+  std::vector< std::vector< FP_PRECISION> > _df;
+
+  /* Number of surfaces for equivalence */
+  int _num_surfaces;
+////////////////
+
 public:
   Solver(TrackGenerator* track_generator=NULL);
   virtual ~Solver();
@@ -536,6 +562,31 @@ public:
   inline void setOTFTransport() {
     _OTF_transport = true;
   }
+
+  /* Functions for equivalence */
+  // Initialization
+  void useDiscontinuityFactors(int use_df);
+  void setFirstDFIteration(int start_df);
+  void initializeCurrentArrays();
+  void resetCurrentArrays();
+  void initializeDFArray(int num_surfaces);
+
+  // Setters
+  void setStartKeff(double keff);
+  void setReferencePartialCurrent(int surface_index, int polar_index,
+                                  int energy_group, FP_PRECISION current);
+  void computeDiscontinuityFactors(bool reset);
+  void setDiscontinuityFactor(int surf_index, int polar_index,
+                              int energy_group, FP_PRECISION df);
+  void loadDFFromFile(std::string filename, int num_surfaces);
+
+  // Getters
+  FP_PRECISION getDiscontinuityFactor(int surface_index, int polar_index,
+                                    int energy_group);
+
+  // Workers
+  int getDfIndex(int fsr_id, int next_fsr_id, int polar_index);
+
 };
 
 

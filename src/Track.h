@@ -32,8 +32,14 @@ struct segment {
   /** A pointer to the material in which this segment resides */
   Material* _material;
 
+  /** The ID for fsr in which the previous segment on this track resides */
+  int _prev_region_id;
+
   /** The ID for flat source region in which this segment resides */
   int _region_id;
+
+  /** The ID for fsr in which the next segment on this track resides */
+  int _next_region_id;
 
   /** The ID of the track */
   int _track_idx;

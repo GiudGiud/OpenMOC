@@ -86,6 +86,11 @@ Solver::Solver(TrackGenerator* track_generator) {
   //FIXME Parameters for xs modification, should be deleted
   _reset_iteration = -1;
   _limit_xs = false;
+
+  // Equivalence
+  _use_DF = 0;
+  _start_keff = 1.;
+  _start_DF = 0;
 }
 
 /**
@@ -1338,6 +1343,33 @@ void Solver::computeFlux(int max_iters, bool only_fixed_source) {
   countFissionableFSRs();
   initializeExpEvaluators();
 
+  if (_use_DF > 0) {
+    /* Create map from fsr to cells */
+    _geometry->matchFSRstoCells();
+
+    /* Get pointer to fsr to cells map from the geometry */
+    _fsr_to_cells = _geometry->getMapFSRstoCells(); 
+
+    /* Get pointer to cell_names to surface index map from the geometry */
+    _surface_map = _geometry->getSurfaceMap();
+
+    /* Print surface map */
+    log_printf(INFO, "Surface map content");
+    for(auto it = _surface_map->cbegin(); it != _surface_map->cend(); ++it){
+      log_printf(INFO, "Surface %s - index %d", it->first.c_str(), it->second);
+    }
+    if (_use_DF==1)
+      log_printf(NORMAL, "random dfs %.4f %.4f %.4f", _df[0][4], _df[2][4], _df[4][4]);
+    if (_use_DF>=2)
+      log_printf(NORMAL, "random currents %.4f %.4f %.4f", _reference_currents[0][4],
+                 _reference_currents[0][4], _reference_currents[0][4]);
+
+    log_printf(INFO, "FSR to cells map");
+    for(auto it = _fsr_to_cells->cbegin(); it != _fsr_to_cells->cend(); ++it){
+      log_printf(INFO, "%d %s", it->first, it->second->getName());
+    }
+  }
+
   /* Initialize new flux arrays if a) the user requested the use of
    * only fixed sources or b) no previous simulation was performed which
    * initialized and computed the flux (e.g., an eigenvalue calculation) */
@@ -1358,15 +1390,22 @@ void Solver::computeFlux(int max_iters, bool only_fixed_source) {
   /* Source iteration loop */
   for (int i=0; i < max_iters; i++) {
 
+    // Equivalence - reset the tallied currents / update DFs
+    if (_tallied_currents.size() > 0) {
+      resetCurrentArrays();
+      //computeDiscontinuityFactors(false); //updating every ite is less stable
+    }
+
     transportSweep();
     addSourceToScalarFlux();
     residual = computeResidual(SCALAR_FLUX);
     storeFSRFluxes();
+    _num_iterations = i;
 
     log_printf(NORMAL, "Iteration %d:\tres = %1.3E", i, residual);
 
     /* Check for convergence of the fission source distribution */
-    if (i > 1 && residual < _converge_thresh) {
+    if (i > _start_DF && residual < _converge_thresh) {
       _num_iterations = i;
       _timer->stopTimer();
       _timer->recordSplit("Total time");
@@ -1462,12 +1501,12 @@ void Solver::computeSource(int max_iters, double k_eff, residualType res_type) {
     addSourceToScalarFlux();
     residual = computeResidual(res_type);
     storeFSRFluxes();
+    _num_iterations = i;
 
     log_printf(NORMAL, "Iteration %d:\tres = %1.3E", i, residual);
 
     /* Check for convergence of the fission source distribution */
     if (i > 1 && residual < _converge_thresh) {
-      _num_iterations = i;
       _timer->stopTimer();
       _timer->recordSplit("Total time");
       return;
@@ -1527,6 +1566,10 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
   if (!_is_restart)
     _k_eff = 1.;
 
+  if (!_is_restart or (_k_eff==1. and _start_keff !=1.))
+    _k_eff = _start_keff;
+  log_printf(NORMAL, "Starting Keff %f", _k_eff);
+
   /* Initialize data structures */
   initializeFSRs();
   countFissionableFSRs();
@@ -1541,6 +1584,32 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
     MPI_Barrier(_geometry->getMPICart());
 #endif
   printInputParamsSummary();
+
+  if (_use_DF > 0) {
+    /* Create map from fsr to cells */
+    _geometry->matchFSRstoCells();
+
+    /* Get pointer to fsr to cells map from the geometry */
+    _fsr_to_cells = _geometry->getMapFSRstoCells(); 
+
+    /* Get pointer to cell_names to surface index map from the geometry */
+    _surface_map = _geometry->getSurfaceMap();
+
+    /* Print surface map */
+    log_printf(INFO, "Surface map content");
+    for(auto it = _surface_map->cbegin(); it != _surface_map->cend(); ++it){
+      log_printf(INFO, "Surface %s - index %d", it->first.c_str(), it->second);
+    }
+    log_printf(INFO, "random df %.4f %.4f %.4f", _df[0][69], _df[1][69], _df[4][69]);
+
+    log_printf(INFO, "FSR to cells map in domain 1 (one out of ten fsrs)");
+    int a = -1;
+    for(auto it = _fsr_to_cells->cbegin(); it != _fsr_to_cells->cend(); ++it){
+      a++;
+      if (a%10 == 0 and _geometry->getNumFSRs()<1000)
+        log_printf(INFO, "%d %s", it->first, it->second->getName());
+    }
+  }
 
   /* Load reference solution if necessary */
   if (_calculate_residuals_by_reference) {
@@ -1623,6 +1692,12 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
       computeStabilizingFlux();
     }
 
+    // Equivalence - reset the tallied currents / update DFs
+    if (_tallied_currents.size() > 0) {
+      resetCurrentArrays();
+      //computeDiscontinuityFactors(false); //updating every ite is less stable
+    }
+
     /* Perform the source iteration */
     computeFSRSources(i);
     transportSweep();
@@ -1682,7 +1757,7 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
     _num_iterations++;
 
     /* Check for convergence of the fission source distribution */
-    if (i > 1 && residual < _converge_thresh && std::abs(dk) < 1)
+    if (i > _start_DF && residual < _converge_thresh && std::abs(dk) < 1)
       break;
   }
 
@@ -2260,15 +2335,14 @@ void Solver::printInputParamsSummary() {
     if (_num_groups != _cmfd->getNumCmfdGroups()) {
       log_printf(NORMAL, "CMFD Group Structure:");
       log_printf(NORMAL, "\t MOC Group \t CMFD Group");
-      for (int g=0; g < _cmfd->getNumMOCGroups(); g++)
+      for (int g=0; g < _num_groups; g++)
         log_printf(NORMAL, "\t %d \t\t %d", g+1, _cmfd->getCmfdGroup(g)+1);
     }
     else
       log_printf(NORMAL, "CMFD and MOC group structures match");
   }
-  else {
+  else
     log_printf(NORMAL, "CMFD acceleration: OFF");
-  }
 }
 
 
@@ -2297,3 +2371,305 @@ void Solver::printBGQMemory() {
              (double)mmap/(1024*1024));
 }
 #endif
+
+
+/**
+ * @brief Tell the solver how to use discontinuity factors
+ * @param use_df =0 dont use, =1 use and generate, =2 just use
+ */
+void Solver::useDiscontinuityFactors(int use_df) {
+    _use_DF = use_df;
+}
+
+
+/**
+ * @brief Tell the solver at which iteration to start using DFs
+ * @param start_df iteration to start using DFs at
+ */
+void Solver::setFirstDFIteration(int start_df){
+    _start_DF = start_df;
+}
+
+/**
+ * @brief Initialize vectors that contain the reference current and MOC current
+ * @details Current arrays are index by surface/polar angle then by energy group
+ */
+void Solver::initializeCurrentArrays(){
+
+  if (_num_surfaces == 0)
+    log_printf(ERROR, "Trying to allocate arrays for currents "
+               "but the number of surfaces has not been set/been set to 0");
+
+  /* Number of groups only set at FSR initialization */
+  _num_groups = _geometry->getNumEnergyGroups();
+
+  int num_polar = _num_polar;
+  if (!_SOLVE_3D)
+    num_polar /= 2;
+
+  /* Current arrays are kept as vectors of vectors */
+  //TODO Consider lumping polar with energy groups for efficiency in 2D
+  _reference_currents.resize(1+_num_surfaces * num_polar);
+  _tallied_currents.resize(1+_num_surfaces * num_polar);
+
+  for (int i=0; i<1+_num_surfaces * num_polar; i++) {
+    _reference_currents.at(i).resize(_num_groups, 0.);
+    _tallied_currents.at(i).resize(_num_groups, 0.);
+  }
+}
+
+
+/**
+ * @brief Reset the MOC tallied currents to 0
+ */
+void Solver::resetCurrentArrays() {
+
+  if (_tallied_currents.size() == 0)
+    log_printf(ERROR, "Cannot reset tallied currents since they have not been allocated.");
+
+  int num_polar = _num_polar;
+  if (!_SOLVE_3D)
+    num_polar /= 2;
+
+  for (int i=0; i<_num_surfaces * num_polar; i++)
+    for (int g=0; g < _num_groups; g++)
+      _tallied_currents[1 + i][g] = 0.;
+}
+
+
+/**
+ * @brief Allocate an array for the discontinuity factors
+ */
+void Solver::initializeDFArray(int num_surfaces) {
+
+  _num_surfaces = num_surfaces;
+
+  /* Number of groups only set at FSR initialization */
+  _num_groups = _geometry->getNumEnergyGroups();
+
+  int num_polar = _num_polar;
+  if (!_SOLVE_3D)
+    num_polar /= 2;
+
+  _df.resize(1 + _num_surfaces * num_polar);
+  for (int i=0; i<1 + _num_surfaces * num_polar; i++)
+    _df.at(i).resize(_num_groups, 1);
+}
+
+
+/**
+ * @brief Set a reference partial current for the MOC solver to match with DFs
+ * @params surface_index
+ * @params polar_index
+ * @params energy_group
+ * @params current
+ */
+void Solver::setReferencePartialCurrent(int surface_index, int polar_index,
+                                        int energy_group,
+                                        FP_PRECISION current) {
+  if (_reference_currents.size() == 0)
+    log_printf(ERROR, "Reference current cannot be set since array has not "
+               "been allocated");
+
+  int num_polar = _num_polar;
+  if (!_SOLVE_3D)
+    num_polar /= 2;
+
+  _reference_currents[1 + surface_index * num_polar +
+                      polar_index][energy_group] = current;
+  log_printf(DEBUG, "Setting current for surface %d, polar %d, in group %d : %f",
+             surface_index, polar_index, energy_group, current);
+}
+
+
+/**
+ * @brief Compute discontinuity factors using the reference and MOC-tallied currents
+ * @params reset whether to reset the discontinuity factors to 0
+ */
+void Solver::computeDiscontinuityFactors(bool reset) {
+
+  if (_df.size() == 0)
+    log_printf(ERROR, "Discontinuity factors array has not been initialized.");
+  if (_reference_currents.size() == 0)
+    log_printf(ERROR, "Currents arrays have not been initialized");
+
+  int num_polar = _num_polar;
+  if (!_SOLVE_3D)
+    num_polar /= 2;
+
+  if (reset) {
+    for (int i=0; i<1+_num_surfaces * num_polar; i++)
+     for (int g=0; g<_num_groups; g++)
+       _df[i][g] = 1.;
+  }
+  else {
+    for (int i=0; i<_num_surfaces * num_polar; i++) {
+     for (int g=0; g<_num_groups; g++) {
+       //if (g==0)
+       //  log_printf(NORMAL, "g%d : %f %f", g, _reference_currents[1+i][g], _tallied_currents[1+i][g]);
+       _df[1 + i][g] = _reference_currents[1+i][g] / _tallied_currents[1+i][g];
+  } } }
+}
+
+
+/**
+ * @brief Set the initialize Keff of the simulation
+ * @params keff initial Keff
+ */
+void Solver::setStartKeff(double keff) {
+  _start_keff = keff;
+}
+
+
+/**
+ * @brief Set a discontinuity factor directly
+ * @params surface_index
+ * @params polar_index
+ * @params energy_group
+ * @params df
+ */
+void Solver::setDiscontinuityFactor(int surface_index, int polar_index,
+                                    int energy_group, FP_PRECISION df) {
+
+  if (_df.size() == 0)
+    log_printf(ERROR, "Discontinuity factors array has not been initialized.");
+
+  int num_polar = _num_polar;
+  if (!_SOLVE_3D)
+    num_polar /= 2;
+
+  _df[1 + surface_index * num_polar + polar_index][energy_group] = df;
+}
+
+
+/**
+ * @brief Load discontinuity factors from a text file
+ * @details Assumes dfs are the same order as the surface map, assumes no 
+ * azimuthal dependence of the dfs
+ * @param filename The name of the file from which to load the dfs
+ * @param num_surfaces Two sets of discontinuity factors per surface
+ */
+void Solver::loadDFFromFile(std::string filename, int num_surfaces){
+
+  std::cout << "Assuming surfaces are in the same order" << std::endl;
+  std::cout << "Assuming no DF azimuthal correction" << std::endl;
+
+  /* Allocate an array for the discontinuity factors */
+  initializeDFArray(num_surfaces);
+
+  /* Read the file line by line */
+  std::ifstream input(filename);
+  std::string line;
+
+  log_printf(NORMAL, "Reading DFs from %s", filename.c_str());
+  if (not input.is_open()) {
+    log_printf(WARNING, "DF file could not be found");
+    abort();
+  }
+  else
+    log_printf(NORMAL, "Loading discontinuity factors from file");
+
+  int p = -1;
+  int s = 0;
+  int _num_polar_2 = _num_polar / 2;
+
+  while( std::getline(input, line) ) {
+
+    /* DFs are sorted by surfaces, then by polar angles. Each line has all the
+     * energy groups */
+    p++;
+    if (p == (_num_polar_2))
+      s++;
+    p = p % (_num_polar_2);
+
+    /* Get DF value for each group for this surface and polar angle */
+    size_t last = 0;
+    size_t next = 0;
+    int g = 0;
+    while ((next = line.find(' ', last)) != std::string::npos) {
+      _df[1 + s*_num_polar + p][g] = std::stod(line.substr(last, next-last));
+      if (_SOLVE_3D)
+        _df[1 + s*_num_polar + (_num_polar - 1 - p)][g] = _df[s*_num_polar + p][g];
+
+      last = next + 1; 
+      g++;
+    }
+    _df[1 + s*_num_polar + p][g] = std::stod(line.substr(last));
+    if (_SOLVE_3D)
+      _df[1 + s*_num_polar + (_num_polar -1 - p)][g] = _df[s*_num_polar + p][g];
+  }
+  input.close();
+}
+
+
+/**
+ * @brief Get the discontinuity factor from the solver
+ * @param surface_index index of the surface
+ * @param polar_index polar angle index
+ * @param energy_group energy group of interest
+ */
+FP_PRECISION Solver::getDiscontinuityFactor(int surface_index, int polar_index,
+                                            int energy_group) {
+
+  if (energy_group > _num_groups)
+    log_printf(ERROR, "Unable to get a DF for energy group %d when the solver "
+               "only uses %d energy groups.", energy_group, _num_groups);
+
+  if (surface_index > _num_surfaces)
+    log_printf(ERROR, "Unable to get a DF for surface %d when the geometry "
+               "only contains %d surfaces.", surface_index, _num_surfaces);
+
+  int num_polar = _num_polar;
+  if (!_SOLVE_3D)
+    num_polar /= 2;
+
+  if (polar_index > num_polar)
+    log_printf(ERROR, "Unable to get a DF for polar angle %d when the solver "
+               "only uses %d polar angles.", polar_index, num_polar);
+
+  return _df.at(1 + surface_index * num_polar + polar_index).at(energy_group);
+}
+
+
+/**
+ * @brief Get the index into the DF array
+ * @param fsr_id current segment fsr
+ * @param next_fsr_id next segment fsr
+ * @param polar_index polar angle index of segment
+ */
+int Solver::getDfIndex(int fsr_id, int next_fsr_id, int polar_index) {
+  //std::cout << "FSR " << fsr_id << " next " << next_fsr_id << std::endl;
+
+  /* Match fsrs to a cell, as DFs are stored as cell to cell */
+  std::string cell_from = _fsr_to_cells->find(fsr_id)->second->getName();
+  std::string cell_to = _fsr_to_cells->find(next_fsr_id)->second->getName();
+
+  /* DFs are only for cell types right now, to use different DFs per cell couples,
+     switch the lookup to use cell ids rather than cell names */
+
+  //log_printf(NORMAL, "Key %s -> %s", cell_from.c_str(), cell_to.c_str());
+  int df_index = -1;
+
+  int num_polar = _num_polar;
+  if (!_SOLVE_3D)
+    num_polar /= 2;
+
+  /* Key if one DF per type of interface */
+  std::string key = cell_from + std::string("->") + cell_to;
+
+  /* Look for key in map of surfaces that have DFs */
+  std::map<std::string,int>::iterator it = _surface_map->find(key);
+  //TODO If performance issue, restrict DFs by looking at cell names
+
+  if ( (cell_from.compare(cell_to) != 0) and 
+      it != _surface_map->end() ) {
+
+    /* Find the index */
+    int surface_index = it->second;
+    //log_printf(NORMAL, "Surface index %d", surface_index);
+
+    df_index = 1 + surface_index * num_polar + polar_index;
+  }
+
+  return df_index;
+}

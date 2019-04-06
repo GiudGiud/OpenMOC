@@ -272,7 +272,8 @@ void TraverseSegments::loopOverTracksByStackOTF(MOCKernel* kernel) {
 void TraverseSegments::traceSegmentsExplicit(Track* track, MOCKernel* kernel) {
   for (int s=0; s < track->getNumSegments(); s++) {
     segment* seg = track->getSegment(s);
-    kernel->execute(seg->_length, seg->_material, seg->_region_id, 0,
+    kernel->execute(seg->_length, seg->_material, seg->_region_id,
+                    seg->_prev_region_id, seg->_next_region_id, 0,
                     seg->_cmfd_surface_fwd, seg->_cmfd_surface_bwd,
                     seg->_starting_position[0], seg->_starting_position[1],
                     seg->_starting_position[2], 0, M_PI_2);
@@ -420,6 +421,8 @@ void TraverseSegments::traceSegmentsOTF(Track* flattened_track, Point* start,
 
       /* Get the 3D FSR */
       long fsr_id = extruded_FSR->_fsr_ids[z_ind];
+      long next_fsr_id;
+      long prev_fsr_id;
 
       /* Calculate CMFD surface */
       int cmfd_surface_bwd = -1;
@@ -462,7 +465,7 @@ void TraverseSegments::traceSegmentsOTF(Track* flattened_track, Point* start,
           z_centroid = centroid->getZ();
         }
 
-        kernel->execute(dist_3D, extruded_FSR->_materials[z_ind], fsr_id, 0,
+        kernel->execute(dist_3D, extruded_FSR->_materials[z_ind], fsr_id, -1, -1, 0,
                         cmfd_surface_fwd, cmfd_surface_bwd,
                         x_coord - x_centroid, y_coord - y_centroid,
                         z_coord - z_centroid, phi, theta);
@@ -577,8 +580,13 @@ void TraverseSegments::traceStackOTF(Track* flattened_track, int polar_index,
 
     /* Get segment length and extruded FSR */
     double seg_length_2D = segments_2D[s]._length;
+    int prev_extruded_fsr_id = segments_2D[std::max(0, s-1)]._region_id;
     int extruded_fsr_id = segments_2D[s]._region_id;
+    int next_extruded_fsr_id = segments_2D[std::min(flattened_track->getNumSegments()-1,s+1)]._region_id;
+
+    ExtrudedFSR* prev_extruded_FSR = geometry->getExtrudedFSR(prev_extruded_fsr_id);
     ExtrudedFSR* extruded_FSR = geometry->getExtrudedFSR(extruded_fsr_id);
+    ExtrudedFSR* next_extruded_FSR = geometry->getExtrudedFSR(next_extruded_fsr_id);
 
     /* Determine new mesh and z index */
     if (_global_z_mesh == NULL) {
@@ -611,7 +619,18 @@ void TraverseSegments::traceStackOTF(Track* flattened_track, int polar_index,
         z_ind = num_fsrs - z_iter - 1;
 
       /* Extract the FSR ID and Material ID of this 3D FSR */
+      double height = extruded_FSR->_mesh[z_ind];
+      long prev_fsr_id = prev_extruded_FSR->_fsr_ids[
+                   geometry->findAxialIndexInExtrudedFSR(prev_extruded_FSR, height)];
       long fsr_id = extruded_FSR->_fsr_ids[z_ind];
+      long next_fsr_id = next_extruded_FSR->_fsr_ids[
+                   geometry->findAxialIndexInExtrudedFSR(next_extruded_FSR, height)];
+      if (prev_fsr_id > geometry->getNumFSRs())
+        log_printf(ERROR, "Previous fsr id is not a valid fsr");
+      if (next_fsr_id > geometry->getNumFSRs())
+        log_printf(ERROR, "Next fsr id is not a valid fsr");
+
+      /* Extract the Material ID of this 3D FSR */
       Material* material = extruded_FSR->_materials[z_ind];
 
       /* Find CMFD cell if necessary */
@@ -698,8 +717,22 @@ void TraverseSegments::traceStackOTF(Track* flattened_track, int polar_index,
             z_entry = upper_z - z_cent;
           }
 
+          /* Modify prev_fsr_id to account for the fact that this
+          * 3D track stays in the same extruded FSR */
+          int prev_fsr_id_mod = prev_fsr_id;
+          int next_fsr_id_mod = next_fsr_id;
+          if (sign > 0) {
+              int z_ind_pr = std::max(0, z_ind-1);
+              prev_fsr_id_mod = extruded_FSR->_fsr_ids[z_ind_pr];
+          }
+          if (sign < 0) {
+              int z_ind_ne = std::max(0, z_ind-1);
+              next_fsr_id_mod = extruded_FSR->_fsr_ids[z_ind_ne];
+          }
+
           /* Operate on segment */
-          kernel->execute(seg_len_3D, material, fsr_id, i,
+          kernel->execute(seg_len_3D, material, fsr_id, prev_fsr_id_mod,
+                          next_fsr_id_mod, i,
                           cmfd_surface_fwd, cmfd_surface_bwd,
                           x_entry, y_entry, z_entry, phi, theta);
         }
@@ -739,7 +772,7 @@ void TraverseSegments::traceStackOTF(Track* flattened_track, int polar_index,
             double z_entry = start_z - z_cent;
 
             /* Operate on segment */
-            kernel->execute(seg_len_3D, material, fsr_id, i,
+            kernel->execute(seg_len_3D, material, fsr_id, prev_fsr_id, next_fsr_id, i,
                             cmfd_surface_fwd, cmfd_surface_bwd,
                             x_entry, y_entry, z_entry, phi, theta);
           }
@@ -804,8 +837,19 @@ void TraverseSegments::traceStackOTF(Track* flattened_track, int polar_index,
             double y_entry = fsr_y_start + partial_2D * sin_phi;
             double z_entry = enter_z - z_cent;
 
+            /* Modify next_fsr_id to account for the fact that this
+            * 3D track stays in the same extruded FSR */
+            int z_ind_pr = std::max(0, z_ind-1);
+            int z_ind_ne = std::min(z_ind+1, num_fsrs-1);
+            if (sign < 0) {
+              z_ind_pr = std::min(z_ind+1, num_fsrs-1);
+              z_ind_ne = std::max(0, z_ind-1);
+            }
+            int prev_fsr_id_mod = extruded_FSR->_fsr_ids[z_ind_pr];
+            int next_fsr_id_mod = extruded_FSR->_fsr_ids[z_ind_ne];
+
             /* Operate on segment */
-            kernel->execute(seg_len_3D, material, fsr_id, i,
+            kernel->execute(seg_len_3D, material, fsr_id, prev_fsr_id_mod, next_fsr_id_mod, i,
                             cmfd_surface_fwd, cmfd_surface_bwd,
                             x_entry, y_entry, z_entry, phi, theta);
           }
@@ -866,8 +910,21 @@ void TraverseSegments::traceStackOTF(Track* flattened_track, int polar_index,
             z_entry = lower_z - z_cent;
           }
 
+          /* Modify next_fsr_id to account for the fact that this
+          * 3D track stays in the same extruded FSR */
+          int prev_fsr_id_mod = prev_fsr_id;
+          int next_fsr_id_mod = next_fsr_id;
+          if (sign > 0) {
+            int z_ind_ne = std::min(z_ind+1, num_fsrs-1);
+            next_fsr_id_mod = extruded_FSR->_fsr_ids[z_ind_ne];
+          }
+          if (sign < 0) {
+            int z_ind_pr = std::min(z_ind+1, num_fsrs-1);
+            prev_fsr_id_mod = extruded_FSR->_fsr_ids[z_ind_pr];
+          }
+
           /* Operate on segment */
-          kernel->execute(seg_len_3D, material, fsr_id, i,
+          kernel->execute(seg_len_3D, material, fsr_id, prev_fsr_id_mod, next_fsr_id_mod, i,
                           cmfd_surface_fwd, cmfd_surface_bwd,
                           x_entry, y_entry, z_entry, phi, theta);
         }

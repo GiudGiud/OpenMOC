@@ -93,7 +93,7 @@ public:
   void flattenFSRFluxes(FP_PRECISION value);
   double normalizeFluxes();
   void computeFSRSources(int iteration);
-  void tallyLSScalarFlux(segment* curr_segment, int azim_index,
+  void tallyLSScalarFlux(segment* curr_segment, long next_fsr_id, int azim_index,
                                     int polar_index,
                                     FP_PRECISION* fsr_flux,
                                     FP_PRECISION* fsr_flux_x,

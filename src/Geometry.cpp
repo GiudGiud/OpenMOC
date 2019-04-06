@@ -1918,6 +1918,8 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
   Material* material;
   int fsr_id;
   int num_segments;
+  int prev_fsr_id = -1;
+  int next_fsr_id = -1;
 
   /* Use a LocalCoords for the start and end of each segment */
   LocalCoords start(x0, y0, z0, true);
@@ -1955,6 +1957,7 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
     /* Find the segment length, Material and FSR ID */
     length = double(end.getPoint()->distanceToPoint(start.getPoint()));
     material = prev->getFillMaterial();
+    prev_fsr_id = fsr_id;
     fsr_id = findFSRId(&start);
 
     /* Create a new Track segment */
@@ -1962,6 +1965,14 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
     new_segment->_material = material;
     new_segment->_length = length;
     new_segment->_region_id = fsr_id;
+    if (prev_fsr_id == -1)
+      new_segment->_prev_region_id = fsr_id;
+    else
+      new_segment->_prev_region_id = prev_fsr_id;
+    if (curr != NULL)
+      new_segment->_next_region_id = findFSRId(&end);
+    else
+      new_segment->_next_region_id = fsr_id;
 
     log_printf(DEBUG, "segment start x = %f, y = %f; end x = %f, y = %f",
                start.getX(), start.getY(), end.getX(), end.getY());
@@ -4482,4 +4493,73 @@ size_t Geometry::twiddleRead(long* ptr, size_t size, size_t nmemb, FILE* stream)
     for (int i=0; i < nmemb; i++)
       arr[i] = __builtin_bswap64(arr[i]);
   return ret;
+}
+
+
+/**
+ * @brief Creates a map of cells containing FSRs
+ */
+void Geometry::matchFSRstoCells() {
+
+  // map is initialized outside of function next to FSR_keys_map
+
+  Point* centroid;
+  Cell* cell;
+  int fsr_id;
+
+  for(int i = 0; i < _FSR_keys_map.size(); i++){
+
+    fsr_id = _FSR_keys_map.at(_FSRs_to_keys[i])->_fsr_id;
+
+    centroid = _FSR_keys_map.at(_FSRs_to_keys[fsr_id])->_point;
+    LocalCoords coords(centroid->getX(), centroid->getY(), centroid->getZ());
+    coords.setUniverse(_root_universe);
+    cell = findCellContainingCoords(&coords);
+
+    map_FSR_to_cells.insert(std::make_pair(fsr_id, cell));
+  }
+}
+
+
+/**
+ * @brief Returns a pointer to a map of the cells containing each FSR
+ */
+std::map<int,Cell*>* Geometry::getMapFSRstoCells(){
+  return &map_FSR_to_cells;
+}
+
+/**
+ * @brief Fills an entry of the map from cell couples to surfaces
+ */
+void Geometry::fillSurfaceMap(std::string cell_couple, int surface_index){
+    _surface_map.insert(std::make_pair(cell_couple, surface_index));
+}
+
+/**
+ * @brief Returns a pointer to a map with the surfaces
+ */
+std::map<std::string,int>* Geometry::getSurfaceMap(){
+    return &_surface_map;
+}
+
+
+/**
+ * @brief Find the FSR at a given height in an extrudedFSR
+ * @return the return status of the read operation
+ */
+// TODO Make a struct function
+int Geometry::findAxialIndexInExtrudedFSR(ExtrudedFSR* ext_fsr, double height) {
+
+  double* mesh = ext_fsr->_mesh;
+  int num_fsrs = ext_fsr->_num_fsrs;
+  int index = 0;
+
+  for (int i=0; i<num_fsrs; i++) {
+    //std::cout << mesh[i] << " " << height << std::endl;
+    if (mesh[i] >= height)
+      break;
+    index = i;
+  }
+
+  return index;
 }

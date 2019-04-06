@@ -508,8 +508,8 @@ void CPULSSolver::computeFSRSources(int iteration) {
  * @param track_flux a pointer to the Track's angular flux
  * @param direction the segment's direction
  */
-void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
-                                    int polar_index,
+void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
+                                    int azim_index, int polar_index,
                                     FP_PRECISION* __restrict__ fsr_flux,
                                     FP_PRECISION* __restrict__ fsr_flux_x,
                                     FP_PRECISION* __restrict__ fsr_flux_y,
@@ -522,6 +522,18 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
   FP_PRECISION* sigma_t = curr_segment->_material->getSigmaT();
   FP_PRECISION* position = curr_segment->_starting_position;
   ExpEvaluator* exp_evaluator = _exp_evaluators[azim_index][polar_index];
+
+  /* Obtain discontinuity factor (default to array of ones) */
+  std::vector<FP_PRECISION> df = _df[0];
+  int df_index = -1;
+  if (_use_DF > 0) {
+    df_index = getDfIndex(fsr_id, next_fsr_id, _SOLVE_3D * polar_index);
+    if (df_index >= 0 && _num_iterations >= _start_DF)
+      df = _df[df_index];
+    /* If wrong surface or other case, use an array of 1s for DF */
+    else
+      df = _df[0];
+  }
 
   if (_SOLVE_3D) {
 
@@ -573,6 +585,13 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
       /* Compute the change in flux across the segment */
       FP_PRECISION delta_psi = (tau[e] * track_flux[e] - length * src_flat[e])
            * exp_F1 - src_linear[e] * length * length * exp_F2;
+
+      /* Apply DF */
+      FP_PRECISION old_delta_psi = delta_psi;
+      delta_psi *= df[e];
+      delta_psi -= (df[e] - 1) * track_flux[e];
+      exp_H *= df[e]; //////////////
+
       track_flux[e] -= delta_psi;
       delta_psi *= wgt;
 
@@ -646,6 +665,14 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
 #pragma omp simd aligned(tau, src_flat, src_linear, delta_psi, exp_F1, exp_F2, exp_H)
     for (int pe=0; pe < num_polar_2 * _num_groups; pe++) {
 
+      /* Obtain discontinuity factor */
+      int p = pe / _num_groups;
+      int e = pe % _num_groups;
+      if (_use_DF > 0 and df_index >=0)
+        df = _df[df_index+ p];
+      else
+        df = _df[0];
+
       FP_PRECISION wgt = _quad->getWeightInline(azim_index, int(pe/_num_groups));
       exp_H[pe] *=  wgt * tau[pe] * length * track_flux[pe];
 
@@ -653,6 +680,14 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
       delta_psi[pe] = (tau[pe] * track_flux[pe] - length
             * src_flat[pe % _num_groups]) * exp_F1[pe] - length * length 
             * src_linear[pe] * exp_F2[pe];
+
+      // Apply discontinuity factor
+      if (_use_DF > 0 and df_index >= 0 and _num_iterations >= _start_DF) {
+        delta_psi[pe] *= df[e];
+        delta_psi[pe] -= (df[e] - 1) * track_flux[pe];
+        //exp_H *= df[e];
+      }
+
       track_flux[pe] -= delta_psi[pe];
       delta_psi[pe] *= wgt;
     }
@@ -671,6 +706,19 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
                                     delta_psi[p*_num_groups + e] * position[1];
       }
     }
+
+    // Tally outgoing current
+    if (_use_DF >= 2 and df_index >= 0 and _num_iterations >= _start_DF) {
+      omp_set_lock(&_FSR_locks[fsr_id]);
+      for (int p=0; p < num_polar_2; p++) {
+        FP_PRECISION wgt = _quad->getWeightInline(azim_index, p);
+#pragma omp simd
+        for (int e=0; e < _num_groups; e++) 
+          _tallied_currents[df_index+p][e] += wgt * track_flux[p*_num_groups + e] / _df[df_index + p][e];
+      }
+      omp_unset_lock(&_FSR_locks[fsr_id]);
+    }
+
   }
 
   /* Advance starting position for the next segment on this track */

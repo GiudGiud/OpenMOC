@@ -1985,7 +1985,7 @@ void CPUSolver::transportSweep() {
  * @param fsr_flux buffer to store the contribution to the region's scalar flux
  * @param track_flux a pointer to the Track's angular flux
  */
-void CPUSolver::tallyScalarFlux(segment* curr_segment,
+void CPUSolver::tallyScalarFlux(segment* curr_segment, long next_fsr_id,
                                 int azim_index, int polar_index,
                                 FP_PRECISION* __restrict__ fsr_flux,
                                 float* track_flux) {
@@ -1994,6 +1994,16 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment,
   FP_PRECISION length = curr_segment->_length;
   FP_PRECISION* sigma_t = curr_segment->_material->getSigmaT();
   ExpEvaluator* exp_evaluator = _exp_evaluators[azim_index][polar_index];
+
+  /* Obtain discontinuity factor (default to array of ones) */
+  std::vector<FP_PRECISION> df = _df[0];
+  int df_index = -1;
+  if (_use_DF > 0) {
+    df_index = getDfIndex(fsr_id, next_fsr_id, _SOLVE_3D * polar_index);
+
+    if (df_index >= 0 && _num_iterations >= _start_DF)
+      df = _df[df_index];
+  }
 
   if (_SOLVE_3D) {
 
@@ -2010,6 +2020,11 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment,
       /* Compute attenuation and tally the contribution to the scalar flux */
       FP_PRECISION delta_psi = (tau * track_flux[e] - length_2D *
               _reduced_sources(fsr_id, e)) * exponential;
+
+      /* Apply discontinuity factor */
+      delta_psi *= df[e];
+      delta_psi -= (df[e] - 1) * track_flux[e];
+
       track_flux[e] -= delta_psi;
       fsr_flux[e] += delta_psi * _quad->getWeightInline(azim_index,
                                                         polar_index);
@@ -2044,6 +2059,17 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment,
       /* Compute attenuation of the track angular flux */
       delta_psi[pe] = (tau[pe] * track_flux[pe] - length *
                       _reduced_sources(fsr_id, pe%_num_groups)) * exponential;
+
+      /* Apply discontinuity factor */
+      if (_use_DF > 0 and df_index >= 0 and _num_iterations >= _start_DF) {
+        int p = pe / _num_groups;
+        int e = pe % _num_groups;
+        df = _df[df_index + p];
+
+        delta_psi[pe] *= df[e];
+        delta_psi[pe] -= (df[e] - 1) * track_flux[pe];
+      }
+
       track_flux[pe] -= delta_psi[pe];
       delta_psi[pe] *= wgt;
     }
@@ -2054,6 +2080,17 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment,
 #pragma omp simd aligned(fsr_flux)
       for (int e=0; e < _num_groups; e++)
         fsr_flux[e] += delta_psi[p*_num_groups + e];
+    }
+
+    if (_use_DF >= 2 and df_index >= 0 and _num_iterations >= _start_DF) {
+      omp_set_lock(&_FSR_locks[fsr_id]);
+      for (int p=0; p < num_polar_2; p++) {
+        FP_PRECISION wgt = _quad->getWeightInline(azim_index, p);
+#pragma omp simd
+        for (int e=0; e < _num_groups; e++) 
+          _tallied_currents[df_index+p][e] += wgt * track_flux[p*_num_groups + e] / _df[df_index + p][e];
+      }
+      omp_unset_lock(&_FSR_locks[fsr_id]);
     }
   }
 }
