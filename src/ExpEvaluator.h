@@ -323,8 +323,16 @@ inline FP_PRECISION ExpEvaluator::computeExponentialH(int index,
  */
 inline FP_PRECISION ExpEvaluator::computeExponentialG2(FP_PRECISION tau) {
 
-  FP_PRECISION exp_mx;
-  cram7(-tau, &exp_mx);
+
+  FP_PRECISION exp_G2;
+  expG2_fractional(std::max(tau, FP_PRECISION(1e-6)), &exp_G2);
+
+  return exp_G2;
+
+
+
+  //FP_PRECISION exp_mx;
+  //cram7(-tau, &exp_mx);
 
   /* Handle loss of numerical accuracy for small taus */
   // This form keeps the relative error below 5E-03 and the absolute error
@@ -332,11 +340,11 @@ inline FP_PRECISION ExpEvaluator::computeExponentialG2(FP_PRECISION tau) {
   // Max relative error can be reduced to 2E-05 by using standard exp(), and
   // placing the transition at tau=0.01
   //TODO Fit a rational fraction to G2 directly
-  FP_PRECISION full_expr = 2.0f / 3.0f - (1.0f + 2.0f / tau) * 
-                           (1.0f / tau + 0.5f - (1.0f + 1.0f / tau) *
-                           (exp_mx) / tau);
-  FP_PRECISION simp_expr = 7.0f * tau * tau / 120.0f - tau / 12.0f;
-  return (tau >= 0.14f) * full_expr + (tau < 0.14f) * simp_expr;
+  //FP_PRECISION full_expr = 2.0f / 3.0f - (1.0f + 2.0f / tau) * 
+  //                         (1.0f / tau + 0.5f - (1.0f + 1.0f / tau) *
+  //                         (exp_mx) / tau);
+  //FP_PRECISION simp_expr = 7.0f * tau * tau / 120.0f - tau / 12.0f;
+  //return (tau >= 0.14f) * full_expr + (tau < 0.14f) * simp_expr;
 }
 
 

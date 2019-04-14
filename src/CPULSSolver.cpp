@@ -16,7 +16,7 @@ CPULSSolver::CPULSSolver(TrackGenerator* track_generator)
   _scalar_flux_xyz = NULL;
   _reduced_sources_xyz = NULL;
   _stabilizing_flux_xyz = NULL;
-  _stabilize_moments = true;
+  _stabilize_moments = false;
   _fixed_source_moments_on = false;
   _source_type = "Linear";
 }

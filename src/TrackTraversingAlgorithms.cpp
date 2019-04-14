@@ -901,7 +901,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
 
     /* Apply MOC equations */
 #ifndef LINEARSOURCE
-    if (_ls_solver == NULL)
+    if (_ls_solver == NULL or _cpu_solver->getNumIterations() < 10)
       _cpu_solver->tallyScalarFlux(curr_segment, azim_index, polar_index,
                                    fsr_flux, track_flux);
     else
@@ -913,7 +913,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     /* Accumulate contribution of segments to scalar flux before changing fsr */
     if (s < num_segments - 1 && fsr_id != (&segments[s+1])->_region_id) {
 #ifndef LINEARSOURCE
-      if (_ls_solver == NULL)
+      if (_ls_solver == NULL or _cpu_solver->getNumIterations() < 10)
         _cpu_solver->accumulateScalarFluxContribution(fsr_id, fsr_flux);
       else
 #endif
@@ -950,7 +950,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
 
     /* Apply MOC equations */
 #ifndef LINEARSOURCE
-    if (_ls_solver == NULL)
+    if (_ls_solver == NULL or _cpu_solver->getNumIterations() < 10)
       _cpu_solver->tallyScalarFlux(curr_segment, azim_index, polar_index,
                                    fsr_flux, track_flux);
     else
@@ -962,7 +962,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     /* Accumulate contribution of segments to scalar flux before changing fsr */
     if (s > 0 && fsr_id != (&segments[s-1])->_region_id) {
 #ifndef LINEARSOURCE
-      if (_ls_solver == NULL)
+      if (_ls_solver == NULL or _cpu_solver->getNumIterations() < 10)
         _cpu_solver->accumulateScalarFluxContribution(fsr_id, fsr_flux);
       else
 #endif
@@ -977,7 +977,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
   /* Tally contribution for last segment */
   long fsr_id = (&segments[0])->_region_id;
 #ifndef LINEARSOURCE
-  if (_ls_solver == NULL)
+  if (_ls_solver == NULL or _cpu_solver->getNumIterations() < 10)
     _cpu_solver->accumulateScalarFluxContribution(fsr_id, fsr_flux);
   else
 #endif
