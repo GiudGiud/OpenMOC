@@ -841,6 +841,9 @@ void Cmfd::collapseXS() {
             rxn_tally_group += flux * volume;
             trans_tally_group += tot * flux * volume;
 
+            if (flux < 0 or volume <0)
+              log_printf(NODAL, "Prob at fsr %ld g%d : f %f vol %f", *iter, h, flux, volume);
+
             /* Scattering tallies */
             for (int g = 0; g < _num_moc_groups; g++) {
               scat_tally[getCmfdGroup(g)] +=
@@ -862,10 +865,10 @@ void Cmfd::collapseXS() {
 
         if (rxn_tally < FLT_EPSILON / 1e6) {
           log_printf(WARNING, "Negative or zero reaction tally calculated in "
-                     "CMFD cell %d in CMFD group %d", i, e);
-          rxn_tally = ZERO_SIGMA_T;
-          _reaction_tally[i][e] = ZERO_SIGMA_T;
-          _diffusion_tally[i][e] = ZERO_SIGMA_T;
+                     "CMFD cell %d in CMFD group %d : %f -> %f; %f -> %f", i, e, rxn_tally, _reaction_tally[i-1][e], _diffusion_tally[i][e], _diffusion_tally[i-1][e]);
+          rxn_tally = _reaction_tally[i-1][e]; //ZERO_SIGMA_T;
+          _reaction_tally[i][e] = _reaction_tally[i-1][e];//ZERO_SIGMA_T;
+          _diffusion_tally[i][e] = _diffusion_tally[i-1][e]; //ZERO_SIGMA_T;
         }
 
         cell_material->setSigmaTByGroup(total_tally / rxn_tally, e + 1);
@@ -3460,6 +3463,10 @@ void Cmfd::initialize() {
       int internal = ncg * num_boundary_cells;
       int comm_data_size = storage_per_cell * num_boundary_cells;
 
+      //NOTE Rank 0 is at a corner
+      log_printf(INFO_ONCE, "Max CMFD communication buffers size = %6.2f MB",
+                 (4 * comm_data_size + internal) * sizeof(CMFD_PRECISION)/1e6);
+
       _inter_domain_data = new CMFD_PRECISION[comm_data_size + internal];
       _send_domain_data = new CMFD_PRECISION[comm_data_size];
 
@@ -3507,6 +3514,10 @@ void Cmfd::initialize() {
       int split_current_size = ncg * ns * num_boundary_cells;
       _send_split_current_data = new CMFD_PRECISION[split_current_size];
       _receive_split_current_data = new CMFD_PRECISION[split_current_size];
+
+      //NOTE Rank 0 is at a corner
+      log_printf(INFO_ONCE, "Max CMFD corner current comm. storage = %6.2f MB",
+                 4 * split_current_size * sizeof(CMFD_PRECISION) / 1e6);
 
       _send_split_currents_array = new CMFD_PRECISION*[NUM_FACES];
       _receive_split_currents_array = new CMFD_PRECISION*[NUM_FACES];

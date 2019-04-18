@@ -551,7 +551,7 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
 #pragma omp simd aligned(sigma_t, tau, exp_G)
     for (int e=0; e < _num_groups; e++) {
       /* Bound tau by 1e-8 to limit error on the F2 term */
-      tau[e] = std::max(FP_PRECISION(1e-8), length * sigma_t[e]);
+      tau[e] = std::max(FP_PRECISION(1e-7), length * sigma_t[e]);
       expG_fractional(tau[e], &exp_G[e]);
     }
 
@@ -721,6 +721,8 @@ void CPULSSolver::addSourceToScalarFlux() {
   if (_SOLVE_3D)
     nc = 6;
 
+  long num_negative_fluxes = 0;
+
 #pragma omp parallel
   {
     FP_PRECISION volume;
@@ -732,6 +734,8 @@ void CPULSSolver::addSourceToScalarFlux() {
 #pragma omp for
     for (long r=0; r < _num_FSRs; r++) {
       volume = _FSR_volumes[r];
+      if (volume < FLT_EPSILON)
+        volume = 1e25;
       sigma_t = _FSR_materials[r]->getSigmaT();
 
       for (int e=0; e < _num_groups; e++) {
@@ -773,7 +777,46 @@ void CPULSSolver::addSourceToScalarFlux() {
         _scalar_flux_xyz(r,e,1) /= sigma_t[e];
         if (_SOLVE_3D)
           _scalar_flux_xyz(r,e,2) /= sigma_t[e];
+
+	if (_num_iterations < 10) {
+	_scalar_flux_xyz(r,e,0)=0;
+	_scalar_flux_xyz(r,e,1)=0;
+	_scalar_flux_xyz(r,e,2)=0;
       }
+
+	if (_scalar_flux(r, e) < 0.0) {
+#pragma omp atomic update
+	  num_negative_fluxes++;
+          log_printf(NODAL, "Negative flux in fsr %ld g%d : %f", r, e, _scalar_flux(r, e));
+          _scalar_flux(r, e) = 1e-7;
+        }
+
+
+
+      }
+    }
+  }
+
+  /* Tally the total number of negative fluxes across the entire problem */
+  long total_num_negative_fluxes = num_negative_fluxes;
+  int num_negative_flux_domains = (num_negative_fluxes > 0);
+  int total_num_negative_flux_domains = num_negative_flux_domains;
+#ifdef MPIx
+  if (_geometry->isDomainDecomposed()) {
+    MPI_Allreduce(&num_negative_fluxes, &total_num_negative_fluxes, 1,
+                  MPI_LONG, MPI_SUM, _geometry->getMPICart());
+    MPI_Allreduce(&num_negative_flux_domains,
+                  &total_num_negative_flux_domains, 1,
+                  MPI_INT, MPI_SUM, _geometry->getMPICart());
+  }
+#endif
+
+  /* Report negative fluxes */
+  if (total_num_negative_fluxes > 0) {
+    if (_geometry->isRootDomain()) {
+      log_printf(WARNING, "Computed %ld negative fluxes on %d domains",
+                 total_num_negative_fluxes,
+                 total_num_negative_flux_domains);
     }
   }
 }

@@ -30,7 +30,7 @@ CMFD_PRECISION ?= single
 #case = models/non-uniform-lattice/non-uniform-lattice.cpp
 #case ?= models/run_time_standard/run_time_standard.cpp
 #case ?= models/assembly_2d/load-assembly.cpp
-case ?= models/core_4440/load-core.cpp
+case ?= models/core_6a/load-core.cpp
 
 source = \
 Cell.cpp \
@@ -189,7 +189,7 @@ ifeq ($(OPTIMIZE),yes)
     CFLAGS += -O3 -ffast-math -fvectorize -fpic
   endif
   # Set the number of groups at compile time
-  CFLAGS += -DNGROUPS=70
+  CFLAGS += -DNGROUPS=25
   # Set the source to linear source at compile time
   #CFLAGS += -DLINEARSOURCE
   # Set the dimension to 3D at compile time
