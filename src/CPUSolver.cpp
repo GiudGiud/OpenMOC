@@ -2216,6 +2216,7 @@ void CPUSolver::addSourceToScalarFlux() {
       _scalar_flux(r, e) += FOUR_PI * _reduced_sources(r, e) / sigma_t[e];
 
       if (_scalar_flux(r, e) < 0.0 && !_negative_fluxes_allowed) {
+        _scalar_flux(r, e) = 1e-20;
 #pragma omp atomic update
         num_negative_fluxes++;
       }

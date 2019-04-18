@@ -209,9 +209,12 @@ void CPULSSolver::initializeFixedSources() {
     source_z = fsr_iter->second[2];
 
     /* Warn the user if a fixed source has already been assigned to this FSR */
-    if (fabs(_fixed_sources_xyz(fsr_id,group,0)) > FLT_EPSILON ||
-        fabs(_fixed_sources_xyz(fsr_id,group,1)) > FLT_EPSILON ||
-        fabs(_fixed_sources_xyz(fsr_id,group,2)) > FLT_EPSILON)
+    if ((fabs(_fixed_sources_xyz(fsr_id,group,0) - source_x) > FLT_EPSILON &&
+        fabs(_fixed_sources_xyz(fsr_id,group,0)) > FLT_EPSILON) ||
+        (fabs(_fixed_sources_xyz(fsr_id,group,1) - source_y) > FLT_EPSILON &&
+        fabs(_fixed_sources_xyz(fsr_id,group,1)) > FLT_EPSILON) ||
+        (fabs(_fixed_sources_xyz(fsr_id,group,2) - source_z) > FLT_EPSILON &&
+        fabs(_fixed_sources_xyz(fsr_id,group,2)) > FLT_EPSILON))
       log_printf(WARNING, "Overriding fixed linear source %f %f %f in FSR ID=%d"
                  " group %d with %f %f %f", _fixed_sources_xyz(fsr_id,group, 0),
                  _fixed_sources_xyz(fsr_id,group,1),
@@ -451,7 +454,7 @@ void CPULSSolver::computeFSRSources(int iteration) {
 
         /* Compute total (scatter+fission) reduced source moments */
         if (_SOLVE_3D) {
-          if (!_negative_fluxes_allowed && (_reduced_sources(r,g) > 1e-15
+          if (_negative_fluxes_allowed || (_reduced_sources(r,g) > 1e-15
               || iteration > 29)) {
             _reduced_sources_xyz(r,g,0) = ONE_OVER_FOUR_PI / 2 *
                  (_FSR_lin_exp_matrix[r*num_coeffs  ] * src_x +
@@ -473,7 +476,7 @@ void CPULSSolver::computeFSRSources(int iteration) {
           }
         }
         else {
-          if (!_negative_fluxes_allowed && (_reduced_sources(r,g) > 1e-15
+          if (_negative_fluxes_allowed || (_reduced_sources(r,g) > 1e-15
               || iteration > 29)) {
             _reduced_sources_xyz(r,g,0) = ONE_OVER_FOUR_PI / 2 *
                  (_FSR_lin_exp_matrix[r*num_coeffs  ] * src_x +
@@ -590,7 +593,7 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
       FP_PRECISION old_delta_psi = delta_psi;
       delta_psi *= df[e];
       delta_psi -= (df[e] - 1) * track_flux[e];
-      exp_H *= df[e]; //////////////
+      //exp_H *= df[e]; //////////////
 
       track_flux[e] -= delta_psi;
       delta_psi *= wgt;
@@ -770,6 +773,7 @@ void CPULSSolver::addSourceToScalarFlux() {
   int nc = 3;
   if (_SOLVE_3D)
     nc = 6;
+  long num_negative_fluxes = 0;
 
 #pragma omp parallel
   {
@@ -823,9 +827,41 @@ void CPULSSolver::addSourceToScalarFlux() {
         _scalar_flux_xyz(r,e,1) /= sigma_t[e];
         if (_SOLVE_3D)
           _scalar_flux_xyz(r,e,2) /= sigma_t[e];
+
+        if (_scalar_flux(r, e) < 0.0 && !_negative_fluxes_allowed) {
+          _scalar_flux(r, e) = 0;
+          _scalar_flux_xyz(r,e,0)=0;
+          _scalar_flux_xyz(r,e,1)=0;
+          _scalar_flux_xyz(r,e,2)=0;
+#pragma omp atomic update
+          num_negative_fluxes++;
+        }
       }
     }
   }
+
+  /* Tally the total number of negative fluxes across the entire problem */
+  long total_num_negative_fluxes = num_negative_fluxes;
+  int num_negative_flux_domains = (num_negative_fluxes > 0);
+  int total_num_negative_flux_domains = num_negative_flux_domains;
+#ifdef MPIx
+  if (_geometry->isDomainDecomposed()) {
+    MPI_Allreduce(&num_negative_fluxes, &total_num_negative_fluxes, 1,
+                  MPI_LONG, MPI_SUM, _geometry->getMPICart());
+    MPI_Allreduce(&num_negative_flux_domains,
+                  &total_num_negative_flux_domains, 1,
+                  MPI_INT, MPI_SUM, _geometry->getMPICart());
+  }
+#endif
+
+  /* Report negative fluxes */
+  if (total_num_negative_fluxes > 0  && !_negative_fluxes_allowed) {
+    if (_geometry->isRootDomain()) {
+      log_printf(WARNING, "Computed %ld negative fluxes on %d domains",
+                 total_num_negative_fluxes, total_num_negative_flux_domains);
+    }
+  }
+
 }
 
 

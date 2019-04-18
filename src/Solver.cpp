@@ -1596,18 +1596,18 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
     _surface_map = _geometry->getSurfaceMap();
 
     /* Print surface map */
-    log_printf(INFO, "Surface map content");
+    log_printf(INFO_ONCE, "Surface map content");
     for(auto it = _surface_map->cbegin(); it != _surface_map->cend(); ++it){
-      log_printf(INFO, "Surface %s - index %d", it->first.c_str(), it->second);
+      log_printf(INFO_ONCE, "Surface %s - index %d", it->first.c_str(), it->second);
     }
-    log_printf(INFO, "random df %.4f %.4f %.4f", _df[0][69], _df[1][69], _df[4][69]);
+    log_printf(INFO_ONCE, "random df %.4f %.4f %.4f", _df[0][69], _df[1][69], _df[4][69]);
 
-    log_printf(INFO, "FSR to cells map in domain 1 (one out of ten fsrs)");
+    log_printf(INFO_ONCE, "FSR to cells map in domain 1 (one out of ten fsrs)");
     int a = -1;
     for(auto it = _fsr_to_cells->cbegin(); it != _fsr_to_cells->cend(); ++it){
       a++;
       if (a%10 == 0 and _geometry->getNumFSRs()<1000)
-        log_printf(INFO, "%d %s", it->first, it->second->getName());
+        log_printf(INFO_ONCE, "%d %s", it->first, it->second->getName());
     }
   }
 
