@@ -857,7 +857,7 @@ void Solver::initializeFSRs() {
  */
 void Solver::countFissionableFSRs() {
 
-  log_printf(INFO, "Counting fissionable FSRs...");
+  log_printf(INFO_ONCE, "Counting fissionable FSRs...");
 
   /* Count the number of fissionable FSRs */
   _num_fissionable_FSRs = 0;
@@ -1119,7 +1119,7 @@ void Solver::initializeFixedSources() {
  */
 void Solver::initializeCmfd() {
 
-  log_printf(INFO, "Initializing CMFD...");
+  log_printf(INFO_ONCE, "Initializing CMFD...");
 
   /* Retrieve CMFD from the Geometry */
   _cmfd = _geometry->getCmfd();
@@ -1359,10 +1359,10 @@ void Solver::computeFlux(int max_iters, bool only_fixed_source) {
       log_printf(INFO, "Surface %s - index %d", it->first.c_str(), it->second);
     }
     if (_use_DF==1)
-      log_printf(NORMAL, "random dfs %.4f %.4f %.4f", _df[0][4], _df[2][4], _df[4][4]);
+      log_printf(NORMAL, "random dfs %.4e %.4e %.4e", _df[1][4], _df[2][4], _df[4][4]);
     if (_use_DF>=2)
-      log_printf(NORMAL, "random currents %.4f %.4f %.4f", _reference_currents[0][4],
-                 _reference_currents[0][4], _reference_currents[0][4]);
+      log_printf(NORMAL, "random currents %.4e %.4e %.4e", _reference_currents[1][0],
+                 _reference_currents[2][3], _reference_currents[2][6]);
 
     log_printf(INFO, "FSR to cells map");
     for(auto it = _fsr_to_cells->cbegin(); it != _fsr_to_cells->cend(); ++it){
@@ -2471,9 +2471,21 @@ void Solver::setReferencePartialCurrent(int surface_index, int polar_index,
     log_printf(ERROR, "Reference current cannot be set since array has not "
                "been allocated");
 
+  if (surface_index >= _num_surfaces)
+    log_printf(ERROR, "Trying to set a DF for surface index %d, higher than max %d",
+               surface_index, _num_surfaces);
+
+  if (energy_group >= _num_groups)
+    log_printf(ERROR, "Trying to set a DF for group %d, higher than total num groups %d",
+               energy_group, _num_groups);
+
   int num_polar = _num_polar;
   if (!_SOLVE_3D)
     num_polar /= 2;
+
+  if (polar_index >= num_polar )
+    log_printf(ERROR, "Trying to set a DF for polar angle %d, higher than total num polar %d",
+               polar_index, num_polar);
 
   _reference_currents[1 + surface_index * num_polar +
                       polar_index][energy_group] = current;

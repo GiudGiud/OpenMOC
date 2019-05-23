@@ -610,8 +610,8 @@ void Material::setSigmaT(double* xs, int num_groups) {
 
     /* If the cross-section is near zero (e.g., within (-1E-10, 1E-10)) */
     if (fabs(xs[i]) < ZERO_SIGMA_T) {
-      log_printf(INFO, "Overriding zero cross-section in "
-                 "group %d for Material %d with 1E-10", i, _id);
+      log_printf(INFO, "Overriding zero total cross-section in "
+                 "group %d for Material %d with 1E-10", i + 1, _id);
       _sigma_t[i] = FP_PRECISION(ZERO_SIGMA_T);
     }
     else
@@ -636,7 +636,7 @@ void Material::setSigmaTByGroup(double xs, int group) {
 
     /* If the cross-section is near zero (e.g., within (-1E-10, 1E-10)) */
     if (fabs(xs) < ZERO_SIGMA_T) {
-      log_printf(INFO, "Overriding zero cross-section in "
+      log_printf(INFO, "Overriding zero total cross-section in "
                  "group %d for Material %d with 1E-10", group, _id);
       _sigma_t[group-1] = FP_PRECISION(ZERO_SIGMA_T);
     }
