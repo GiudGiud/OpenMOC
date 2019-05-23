@@ -1715,6 +1715,11 @@ void Cmfd::initializeCurrents() {
   if (_surface_currents != NULL)
     delete _surface_currents;
 
+  float size = _num_cmfd_groups * (NUM_FACES + 2 * _balance_sigma_t) *
+              _local_num_x * _local_num_y * _local_num_z *
+              sizeof(CMFD_PRECISION) / float(1e6);
+  log_printf(INFO_ONCE, "CMFD current storage per domain = %6.2f MB", size);
+
   /* Allocate memory for the CMFD Mesh surface and corner currents Vectors */
   _surface_currents = new Vector(_cell_locks, _local_num_x, _local_num_y,
                                  _local_num_z, _num_cmfd_groups * NUM_FACES);

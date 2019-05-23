@@ -857,7 +857,7 @@ void Solver::initializeFSRs() {
  */
 void Solver::countFissionableFSRs() {
 
-  log_printf(INFO, "Counting fissionable FSRs...");
+  log_printf(INFO_ONCE, "Counting fissionable FSRs...");
 
   /* Count the number of fissionable FSRs */
   _num_fissionable_FSRs = 0;
@@ -1119,7 +1119,7 @@ void Solver::initializeFixedSources() {
  */
 void Solver::initializeCmfd() {
 
-  log_printf(INFO, "Initializing CMFD...");
+  log_printf(INFO_ONCE, "Initializing CMFD...");
 
   /* Retrieve CMFD from the Geometry */
   _cmfd = _geometry->getCmfd();
@@ -1359,9 +1359,9 @@ void Solver::computeFlux(int max_iters, bool only_fixed_source) {
       log_printf(INFO, "Surface %s - index %d", it->first.c_str(), it->second);
     }
     if (_use_DF==1)
-      log_printf(NORMAL, "random dfs %.4f %.4f %.4f", _df[0][4], _df[2][4], _df[4][4]);
+      log_printf(NORMAL, "random dfs %.4e %.4e %.4e", _df[0][4], _df[2][4], _df[4][4]);
     if (_use_DF>=2)
-      log_printf(NORMAL, "random currents %.4f %.4f %.4f", _reference_currents[0][4],
+      log_printf(NORMAL, "random currents %.4e %.4e %.4e", _reference_currents[0][4],
                  _reference_currents[0][4], _reference_currents[0][4]);
 
     log_printf(INFO, "FSR to cells map");
