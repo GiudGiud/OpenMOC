@@ -1583,7 +1583,7 @@ void CPUSolver::computeFSRSources(int iteration) {
       if (_reduced_sources(r,G) < 0.0) {
 #pragma omp atomic
         num_negative_sources++;
-        if (iteration < 30 && !_negative_fluxes_allowed)
+        if (iteration < 300 && !_negative_fluxes_allowed)
           _reduced_sources(r,G) = 1.0e-20;
       }
     }
@@ -1609,7 +1609,7 @@ void CPUSolver::computeFSRSources(int iteration) {
       log_printf(WARNING, "Computed %ld negative sources on %d domains",
                  total_num_negative_sources,
                  total_num_negative_source_domains);
-      if (iteration < 30)
+      if (iteration < 300)
         log_printf(WARNING, "Negative sources corrected to zero");
     }
   }

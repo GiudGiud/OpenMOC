@@ -210,11 +210,11 @@ void CPULSSolver::initializeFixedSources() {
 
     /* Warn the user if a fixed source has already been assigned to this FSR */
     if ((fabs(_fixed_sources_xyz(fsr_id,group,0) - source_x) > FLT_EPSILON &&
-        fabs(_fixed_sources_xyz(fsr_id,group,0)) > FLT_EPSILON) ||
+        fabs(_fixed_sources_xyz(fsr_id,group,0)) > FLT_EPSILON && source_x > FLT_EPSILON) ||
         (fabs(_fixed_sources_xyz(fsr_id,group,1) - source_y) > FLT_EPSILON &&
-        fabs(_fixed_sources_xyz(fsr_id,group,1)) > FLT_EPSILON) ||
+        fabs(_fixed_sources_xyz(fsr_id,group,1)) > FLT_EPSILON && source_y > FLT_EPSILON) ||
         (fabs(_fixed_sources_xyz(fsr_id,group,2) - source_z) > FLT_EPSILON &&
-        fabs(_fixed_sources_xyz(fsr_id,group,2)) > FLT_EPSILON))
+        fabs(_fixed_sources_xyz(fsr_id,group,2)) > FLT_EPSILON && source_z > FLT_EPSILON))
       log_printf(WARNING, "Overriding fixed linear source %f %f %f in FSR ID=%d"
                  " group %d with %f %f %f", _fixed_sources_xyz(fsr_id,group, 0),
                  _fixed_sources_xyz(fsr_id,group,1),
@@ -455,7 +455,7 @@ void CPULSSolver::computeFSRSources(int iteration) {
         /* Compute total (scatter+fission) reduced source moments */
         if (_SOLVE_3D) {
           if (_negative_fluxes_allowed || (_reduced_sources(r,g) > 1e-15
-              || iteration > 29)) {
+              || iteration > 300)) {
             _reduced_sources_xyz(r,g,0) = ONE_OVER_FOUR_PI / 2 *
                  (_FSR_lin_exp_matrix[r*num_coeffs  ] * src_x +
                   _FSR_lin_exp_matrix[r*num_coeffs+2] * src_y +
@@ -477,7 +477,7 @@ void CPULSSolver::computeFSRSources(int iteration) {
         }
         else {
           if (_negative_fluxes_allowed || (_reduced_sources(r,g) > 1e-15
-              || iteration > 29)) {
+              || iteration > 300)) {
             _reduced_sources_xyz(r,g,0) = ONE_OVER_FOUR_PI / 2 *
                  (_FSR_lin_exp_matrix[r*num_coeffs  ] * src_x +
                   _FSR_lin_exp_matrix[r*num_coeffs+2] * src_y);

@@ -1957,7 +1957,6 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
     /* Find the segment length, Material and FSR ID */
     length = double(end.getPoint()->distanceToPoint(start.getPoint()));
     material = prev->getFillMaterial();
-    prev_fsr_id = fsr_id;
     fsr_id = findFSRId(&start);
 
     /* Create a new Track segment */
@@ -1972,7 +1971,10 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
     if (curr != NULL)
       new_segment->_next_region_id = findFSRId(&end);
     else
-      new_segment->_next_region_id = fsr_id;
+      new_segment->_next_region_id = fsr_id;  //last one in segment
+
+    /* Save current fsr to make the previous one for the next segment */
+    prev_fsr_id = fsr_id;
 
     log_printf(DEBUG, "segment start x = %f, y = %f; end x = %f, y = %f",
                start.getX(), start.getY(), end.getX(), end.getY());
