@@ -117,6 +117,7 @@ public:
 
   /* Getter routine */
   FP_PRECISION getFluxByCoords(LocalCoords* coords, int group);
+  void printFlatSourceRegions(int iteration, int num_x, int num_y, int num_z);
 };
 
 

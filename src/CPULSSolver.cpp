@@ -534,6 +534,11 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, int azim_index,
       src_flat[e] = _reduced_sources(fsr_id, e);
       for (int i=0; i<3; i++)
         src_flat[e] += _reduced_sources_xyz(fsr_id, e, i) * center_x2[i];
+
+      // The source may not be negative on any part of the segment
+      src_flat[e] = std::max(0.f, src_flat[e]);
+
+      // Compute linear variation of the source on the segment
       src_linear[e] = _reduced_sources_xyz(fsr_id, e, 0) * direction[0];
       src_linear[e] += _reduced_sources_xyz(fsr_id, e, 1) * direction[1];
       src_linear[e] += _reduced_sources_xyz(fsr_id, e, 2) * direction[2];
@@ -831,6 +836,9 @@ void CPULSSolver::addSourceToScalarFlux() {
       log_printf(WARNING, "Computed %ld negative fluxes on %d domains",
                  total_num_negative_fluxes, total_num_negative_flux_domains);
     }
+    if (_cmfd != NULL)
+      printNegativeFluxes(_num_iterations, _cmfd->getNumX(), _cmfd->getNumY(),
+                          _cmfd->getNumZ());
   }
 }
 
@@ -1020,10 +1028,11 @@ void CPULSSolver::checkLimitXS(int iteration) {
     return;
 
   /* Generate linear source coefficients */
-  log_printf(NORMAL, "Generating linear expansion coefficients");
+  log_printf(NORMAL, "Generating new linear exapansion coefficients with "
+             "modified cross sections");
   LinearExpansionGenerator lin_src_coeffs(this);
   lin_src_coeffs.execute();
-  log_printf(NORMAL, "Linear expansion coefficient generation complete");
+  log_printf(NORMAL, "New linear expansion coefficient generation complete");
 }
 
 
@@ -1090,6 +1099,10 @@ void CPULSSolver::initializeCmfd() {
   Solver::initializeCmfd();
   if (_cmfd != NULL)
     _cmfd->setFluxMoments(_scalar_flux_xyz);
+
+  if (_cmfd != NULL)
+    printFlatSourceRegions(_num_iterations, _cmfd->getNumX(), _cmfd->getNumY(),
+                           _cmfd->getNumZ());
 }
 
 
@@ -1163,4 +1176,122 @@ double* CPULSSolver::getLinearExpansionCoeffsBuffer() {
 FP_PRECISION* CPULSSolver::getSourceConstantsBuffer() {
 
   return _FSR_source_constants;
+}
+
+
+/**
+ * @brief A function that prints the number of source regions where the linear
+ *        source matrix could not be formed, in the whole geometry subdivided
+ *        by a 3D lattice.
+ * @param iteration the current iteration
+ * @param num_x number of divisions in X direction
+ * @param num_y number of divisions in Y direction
+ * @param num_z number of divisions in Z direction
+ */
+void CPULSSolver::printFlatSourceRegions(int iteration, int num_x, int num_y,
+                                         int num_z) {
+
+  long long iter = iteration;
+  std::string fname = "k_flat_sources_iter_";
+  std::string iter_num = std::to_string(iter);
+  fname += iter_num;
+  std::ofstream out(fname);
+
+  /* Create a lattice */
+  Lattice lattice;
+  lattice.setNumX(num_x);
+  lattice.setNumY(num_y);
+  lattice.setNumZ(num_z);
+
+  /* Get the root universe */
+  Universe* root_universe = _geometry->getRootUniverse();
+
+  /* Determine the geometry widths in each direction */
+  double width_x = (root_universe->getMaxX() - root_universe->getMinX())/num_x;
+  double width_y = (root_universe->getMaxY() - root_universe->getMinY())/num_y;
+  double width_z = (root_universe->getMaxZ() - root_universe->getMinZ())/num_z;
+
+  /* Determine the center-point of the geometry */
+  double offset_x = (root_universe->getMinX() + root_universe->getMaxX()) / 2;
+  double offset_y = (root_universe->getMinY() + root_universe->getMaxY()) / 2;
+  double offset_z = (root_universe->getMinZ() + root_universe->getMaxZ()) / 2;
+
+  /* Create the Mesh lattice */
+  lattice.setWidth(width_x, width_y, width_z);
+  lattice.setOffset(offset_x, offset_y, offset_z);
+  lattice.computeSizes();
+
+  /* Create a group-wise flat source regions mapping */
+  int by_group[_num_groups];
+  for (int e=0; e < _num_groups; e++)
+    by_group[e] = 0;
+
+  /* Create a spatial mapping of flat source regions */
+  int* mapping = new int[num_x*num_y*num_z]();
+
+  int num_coeffs = 3;
+  if (_SOLVE_3D)
+    num_coeffs = 6;
+
+  /* Loop over all flat source regions */
+  for (long r=0; r < _num_FSRs; r++) {
+
+    /* Determine the Mesh cell containing the FSR */
+    Point* pt = _geometry->getFSRPoint(r);
+    int lat_cell = lattice.getLatticeCell(pt);
+
+    /* Determine the number of flat source regions */
+    for (int e=0; e < _num_groups; e++) {
+      if (std::abs(_FSR_lin_exp_matrix[num_coeffs * r]) < FLT_EPSILON &&
+          std::abs(_FSR_lin_exp_matrix[num_coeffs * r + 1]) < FLT_EPSILON &&
+          std::abs(_FSR_lin_exp_matrix[num_coeffs * r + 2]) < FLT_EPSILON &&
+          std::abs(_FSR_lin_exp_matrix[num_coeffs * r + 3]) < FLT_EPSILON &&
+          std::abs(_FSR_lin_exp_matrix[num_coeffs * r + 4]) < FLT_EPSILON &&
+          std::abs(_FSR_lin_exp_matrix[num_coeffs * r + 5]) < FLT_EPSILON) {
+        by_group[e]++;
+        mapping[lat_cell]++;
+      }
+    }
+  }
+
+  /* If domain decomposed, do a reduction */
+#ifdef MPIx
+  if (_geometry->isDomainDecomposed()) {
+    int size = num_x * num_y * num_z;
+    int flat_src_send[size];
+    for (int i=0; i < size; i++)
+      flat_src_send[i] = mapping[i];
+    MPI_Allreduce(flat_src_send, mapping, size, MPI_INT, MPI_SUM,
+                  _geometry->getMPICart());
+
+    int flat_src_grp_send[size];
+    for (int e=0; e < _num_groups; e++)
+        flat_src_grp_send[e] = by_group[e];
+    MPI_Allreduce(flat_src_grp_send, by_group, _num_groups, MPI_INT, MPI_SUM,
+                  _geometry->getMPICart());
+  }
+#endif
+
+
+  /* Print flat source distribution to file */
+  if (_geometry->isRootDomain()) {
+    out << "[NORMAL]  Group-wise distribution of flat source regions:"
+        << std::endl;
+    for (int e=0; e < _num_groups; e++)
+      out << "[NORMAL]  Group "  << e << ": " << by_group[e] << std::endl;
+    out << "[NORMAL]  Spatial distribution of flat source regions:" << std::endl;
+    for (int z=0; z < num_z; z++) {
+      out << " -------- z = " << z << " ----------" << std::endl;
+      for (int y=0; y < num_y; y++) {
+        for (int x=0; x < num_x; x++) {
+          int ind = (z * num_y + y) * num_x + x;
+          out << mapping[ind] << " ";
+        }
+        out << std::endl;
+      }
+    }
+  }
+  out.close();
+
+  delete[] mapping;
 }

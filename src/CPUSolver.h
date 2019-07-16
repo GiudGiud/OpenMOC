@@ -176,6 +176,7 @@ public:
                       const char* plane);
   void printFluxesTemp();
   void printNegativeSources(int iteration, int num_x, int num_y, int num_z);
+  void printNegativeFluxes(int iteration, int num_x, int num_y, int num_z);
 };
 
 
