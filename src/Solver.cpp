@@ -1348,15 +1348,15 @@ void Solver::computeFlux(int max_iters, bool only_fixed_source) {
     _geometry->matchFSRstoCells();
 
     /* Get pointer to fsr to cells map from the geometry */
-    _fsr_to_cells = _geometry->getMapFSRstoCells(); 
+    _fsr_to_cells = _geometry->getMapFSRstoCells();
 
     /* Get pointer to cell_names to surface index map from the geometry */
     _surface_map = _geometry->getSurfaceMap();
 
     /* Print surface map */
-    log_printf(INFO, "Surface map content");
+    log_printf(NORMAL, "Surface map content");
     for(auto it = _surface_map->cbegin(); it != _surface_map->cend(); ++it){
-      log_printf(INFO, "Surface %s - index %d", it->first.c_str(), it->second);
+      log_printf(NORMAL, "Surface %s - index %d", it->first.c_str(), it->second);
     }
     if (_use_DF==1)
       log_printf(NORMAL, "random dfs %.4e %.4e %.4e", _df[1][4], _df[2][4], _df[4][4]);
@@ -1590,17 +1590,17 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
     _geometry->matchFSRstoCells();
 
     /* Get pointer to fsr to cells map from the geometry */
-    _fsr_to_cells = _geometry->getMapFSRstoCells(); 
+    _fsr_to_cells = _geometry->getMapFSRstoCells();
 
     /* Get pointer to cell_names to surface index map from the geometry */
     _surface_map = _geometry->getSurfaceMap();
 
     /* Print surface map */
-    log_printf(INFO_ONCE, "Surface map content");
+    log_printf(NORMAL, "Surface map content");
     for(auto it = _surface_map->cbegin(); it != _surface_map->cend(); ++it){
-      log_printf(INFO_ONCE, "Surface %s - index %d", it->first.c_str(), it->second);
+      log_printf(NORMAL, "Surface %s - index %d", it->first.c_str(), it->second);
     }
-    log_printf(INFO_ONCE, "random df %.4f %.4f %.4f", _df[0][69], _df[1][69], _df[4][69]);
+    log_printf(NORMAL, "random df %.4f %.4f %.4f", _df[0][69], _df[1][69], _df[4][69]);
 
     log_printf(INFO_ONCE, "FSR to cells map in domain 1 (one out of ten fsrs)");
     int a = -1;
@@ -2443,6 +2443,7 @@ void Solver::resetCurrentArrays() {
 void Solver::initializeDFArray(int num_surfaces) {
 
   _num_surfaces = num_surfaces;
+  std::cout << "Number of surfaces for DF array " << num_surfaces << " polar "<< _num_polar << std::endl;
 
   /* Number of groups only set at FSR initialization */
   _num_groups = _geometry->getNumEnergyGroups();
@@ -2556,7 +2557,7 @@ void Solver::setDiscontinuityFactor(int surface_index, int polar_index,
 
 /**
  * @brief Load discontinuity factors from a text file
- * @details Assumes dfs are the same order as the surface map, assumes no 
+ * @details Assumes dfs are the same order as the surface map, assumes no
  * azimuthal dependence of the dfs
  * @param filename The name of the file from which to load the dfs
  * @param num_surfaces Two sets of discontinuity factors per surface
@@ -2594,6 +2595,8 @@ void Solver::loadDFFromFile(std::string filename, int num_surfaces){
       s++;
     p = p % (_num_polar_2);
 
+    std::cout << "Line " << p << " surface " << s << std::endl;
+
     /* Get DF value for each group for this surface and polar angle */
     size_t last = 0;
     size_t next = 0;
@@ -2603,7 +2606,7 @@ void Solver::loadDFFromFile(std::string filename, int num_surfaces){
       if (_SOLVE_3D)
         _df[1 + s*_num_polar + (_num_polar - 1 - p)][g] = _df[s*_num_polar + p][g];
 
-      last = next + 1; 
+      last = next + 1;
       g++;
     }
     _df[1 + s*_num_polar + p][g] = std::stod(line.substr(last));
@@ -2673,7 +2676,7 @@ int Solver::getDfIndex(int fsr_id, int next_fsr_id, int polar_index) {
   std::map<std::string,int>::iterator it = _surface_map->find(key);
   //TODO If performance issue, restrict DFs by looking at cell names
 
-  if ( (cell_from.compare(cell_to) != 0) and 
+  if ( (cell_from.compare(cell_to) != 0) and
       it != _surface_map->end() ) {
 
     /* Find the index */

@@ -416,7 +416,7 @@ void Quadrature::setThetas(const DoubleVec& thetas) {
                "with %d polar angles and %d azimuthal angles"
                " in each octant", thetas.size(), _num_polar/2,
                _num_azim/4);
-
+  log_printf(NORMAL, "Setting thetas");
   resize2D(_thetas, _num_azim/2, _num_polar);
 
   /* Extract sin thetas from user input */
@@ -1007,6 +1007,7 @@ void GLPolarQuad::setNumPolarAngles(size_t num_polar) {
  */
 void GLPolarQuad::initialize() {
 
+  log_printf(NORMAL, "Initial quad");
   /* Call parent class initialize routine */
   Quadrature::initialize();
 

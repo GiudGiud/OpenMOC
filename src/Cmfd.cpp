@@ -852,7 +852,7 @@ void Cmfd::collapseXS() {
           if (fabs(trans_tally_group) > fabs(rxn_tally_group) * FLT_EPSILON) {
             CMFD_PRECISION flux_avg_sigma_t = trans_tally_group /
                 rxn_tally_group;
-            _diffusion_tally[i][e] += rxn_tally_group / 
+            _diffusion_tally[i][e] += rxn_tally_group /
                 (3.0 * flux_avg_sigma_t);
           }
         }
@@ -1333,7 +1333,7 @@ void Cmfd::constructMatrices(int moc_iteration) {
           delta = getSurfaceWidth(s, global_ind);
 
           /* Set transport term on diagonal */
-          getSurfaceDiffusionCoefficient(i, s, e, moc_iteration, dif_surf, 
+          getSurfaceDiffusionCoefficient(i, s, e, moc_iteration, dif_surf,
                                           dif_surf_corr);
 
           /* Record the corrected diffusion coefficient */
@@ -1422,7 +1422,7 @@ void Cmfd::updateMOCFlux() {
 
         /* Save max update ratio among fsrs and groups in a cell */
         if (_convergence_data != NULL)
-            if (std::abs(log(update_ratio)) > 
+            if (std::abs(log(update_ratio)) >
                 std::abs(log(thread_max_update_ratio)))
               thread_max_update_ratio = update_ratio;
 
@@ -1450,7 +1450,7 @@ void Cmfd::updateMOCFlux() {
     if (_convergence_data != NULL) {
 #pragma omp critical
       {
-        if (std::abs(log(thread_max_update_ratio)) > 
+        if (std::abs(log(thread_max_update_ratio)) >
             std::abs(log(_convergence_data->pf)))
               _convergence_data->pf = thread_max_update_ratio;
       }
@@ -3654,6 +3654,7 @@ void Cmfd::initializeLattice(Point* offset, bool is_2D) {
     _cell_widths_z[0] = _cell_width_z;
     setBoundary(SURFACE_Z_MIN, REFLECTIVE);
     setBoundary(SURFACE_Z_MAX, REFLECTIVE);
+    log_printf(NORMAL, "CMFD 2D case");
   }
 
   if (_non_uniform) {
@@ -4152,7 +4153,7 @@ void Cmfd::copyFullSurfaceCurrents() {
  *          - in MOC at the boundaries, as the incoming currents are not
  *          tallied (except at ite 0, they are null)
  *          - in MOC at the reflective boundaries when tracks hit edges and
- *          corners as the contributions are double tallied (not a bug, only 
+ *          corners as the contributions are double tallied (not a bug, only
  *          a problem for this routine, see NOTE for where to modify code)
  * @param pre_split whether edge currents are not split (default true)
  * @param moc_balance whether to check the MOC balance over the cell or
@@ -4577,8 +4578,8 @@ void Cmfd::packBuffers() {
  * @details comm The cartesian MPI domain communicator object that is
  *          configured for the CMFD exchange
  *          send_buffers A 2D array of floating point data. The outer dimension
- *          corresponds to each face of the domain, while the inner dimension 
- *          is the serialized buffer corresponding to the number of 2D cells 
+ *          corresponds to each face of the domain, while the inner dimension
+ *          is the serialized buffer corresponding to the number of 2D cells
  *          to exchange times the number of energy groups.
  *          recv_buffers A 2D array of floating point data. The outer dimension
  *          corresponds to each face of the domain,  while the inner dimension

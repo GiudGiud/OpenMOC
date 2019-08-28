@@ -42,7 +42,7 @@ Geometry::Geometry() {
  * @brief Destructor clears FSR to Cells and Materials maps.
  */
 Geometry::~Geometry() {
-  
+
   /* Free all materials */
   if (_loaded_from_file) {
     std::map<int, Material*> materials = _root_universe->getAllMaterials();
@@ -50,7 +50,7 @@ Geometry::~Geometry() {
     for (iter = materials.begin(); iter != materials.end(); ++iter)
       delete iter->second;
   }
-  
+
   /* Free all surfaces */
   if (_loaded_from_file) {
     std::map<int, Surface*> surfaces = getAllSurfaces();
@@ -234,7 +234,7 @@ double Geometry::getMaxZ() {
 
 
 /**
- * @brief Returns the boundary conditions at the minimum x-coordinate in the 
+ * @brief Returns the boundary conditions at the minimum x-coordinate in the
  *        Geometry / domain if the geometry is domain-decomposed.
  * @return the boundary conditions for the minimum x-coordinate in the domain
  */
@@ -247,7 +247,7 @@ boundaryType Geometry::getMinXBoundaryType() {
 
 
 /**
- * @brief Returns the boundary conditions at the maximum x-coordinate in the 
+ * @brief Returns the boundary conditions at the maximum x-coordinate in the
  *        Geometry / domain if the geometry is domain-decomposed.
  * @return the boundary conditions for the maximum x-coordinate in the domain
  */
@@ -260,7 +260,7 @@ boundaryType Geometry::getMaxXBoundaryType() {
 
 
 /**
- * @brief Returns the boundary conditions at the minimum y-coordinate in the 
+ * @brief Returns the boundary conditions at the minimum y-coordinate in the
  *        Geometry / domain if the geometry is domain-decomposed.
  * @return the boundary conditions for the minimum y-coordinate in the domain
  */
@@ -273,7 +273,7 @@ boundaryType Geometry::getMinYBoundaryType() {
 
 
 /**
- * @brief Returns the boundary conditions at the maximum y-coordinate in the 
+ * @brief Returns the boundary conditions at the maximum y-coordinate in the
  *        Geometry / domain if the geometry is domain-decomposed.
  * @return the boundary conditions for the maximum y-coordinate in the domain
  */
@@ -286,7 +286,7 @@ boundaryType Geometry::getMaxYBoundaryType() {
 
 
 /**
- * @brief Returns the boundary conditions at the minimum z-coordinate in the 
+ * @brief Returns the boundary conditions at the minimum z-coordinate in the
  *        Geometry / domain if the geometry is domain-decomposed.
  * @return the boundary conditions for the minimum z-coordinate in the domain
  */
@@ -299,7 +299,7 @@ boundaryType Geometry::getMinZBoundaryType() {
 
 
 /**
- * @brief Returns the boundary conditions at the maximum z-coordinate in the 
+ * @brief Returns the boundary conditions at the maximum z-coordinate in the
  *        Geometry / domain if the geometry is domain-decomposed.
  * @return the boundary conditions for the maximum z-coordinate in the domain
  */
@@ -1730,7 +1730,7 @@ void Geometry::printToString(std::string& str, int& index, int value) {
 
 
 /**
- * @brief Generate a string FSR "key" for the FSR where the point reside in. A 
+ * @brief Generate a string FSR "key" for the FSR where the point reside in. A
           string FSR "key" identifies an FSR by its unique hierarchical
  *        lattice/universe/cell structure.
  * @details Since not all FSRs will reside on the absolute lowest universe
@@ -2322,7 +2322,7 @@ void Geometry::segmentizeExtruded(Track* flattened_track,
       curr = findNextCell(&end, phi);
 
       /* Checks that segment does not have the same start and end Points */
-      if (fabs(start.getX() - end.getX()) < FLT_EPSILON && 
+      if (fabs(start.getX() - end.getX()) < FLT_EPSILON &&
           fabs(start.getY() - end.getY()) < FLT_EPSILON)
         log_printf(ERROR, "Created segment with same start and end "
                    "point: x = %f, y = %f", start.getX(), start.getY());
@@ -2853,7 +2853,7 @@ std::vector<long> Geometry::getSpatialDataOnGrid(std::vector<double> dim1,
       else if (strcmp(plane, "xz") == 0)
         point = new LocalCoords(dim1[i], offset, dim2[j], true);
       else if (strcmp(plane, "yz") == 0)
-        point = new LocalCoords(offset, dim1[i], dim2[j], true); 
+        point = new LocalCoords(offset, dim1[i], dim2[j], true);
       else
         log_printf(ERROR, "Unable to extract spatial data for "
                           "unsupported plane %s", plane);
@@ -2932,7 +2932,7 @@ void Geometry::printString() {
 
 /**
  * @brief Prints FSR layout to file
- * @details This provides a way to get the functionality of the 
+ * @details This provides a way to get the functionality of the
  *              plot_flat_source_regions Python function without Python
  * @param plane The "xy", "xz", or "yz" plane in which to extract flat source
  *        regions
@@ -2943,7 +2943,7 @@ void Geometry::printString() {
  * @param bounds_z a two valued array for the plotted z-limits
  */
 void Geometry::printFSRsToFile(const char* plane, int gridsize, double offset,
-                               double* bounds_x, double* bounds_y, 
+                               double* bounds_x, double* bounds_y,
                                double* bounds_z) {
 
   /* Get geometry min and max */
@@ -3042,7 +3042,7 @@ void Geometry::printFSRsToFile(const char* plane, int gridsize, double offset,
     out << "[HEADER] FSR printout" << std::endl;
     out << "[HEADER] Plane = " << plane << std::endl;
     out << "[HEADER] Offset = " << offset << std::endl;
-    out << "[HEADER] Bounds = (" << dim1_min << ", " << dim1_max << ") x (" 
+    out << "[HEADER] Bounds = (" << dim1_min << ", " << dim1_max << ") x ("
         << dim2_min << ", " << dim2_max << ")" << std::endl;
     out << "[HEADER] Gridsize = " << gridsize << std::endl;
     for (int i=0; i < domain_data.size(); i++) {
@@ -3122,7 +3122,7 @@ void Geometry::initializeSpectrumCalculator(Cmfd* spectrum_calculator) {
 
   /* Setup the CMFD lattice with the domain dimensions */
   spectrum_calculator->setLatticeStructure(_num_domains_x, _num_domains_y,
-                                           _num_domains_z); 
+                                           _num_domains_z);
 
   /* Get the global Geometry boundary conditions */
   boundaryType min_x_bound = _root_universe->getMinXBoundaryType();
@@ -3167,7 +3167,7 @@ void Geometry::initializeSpectrumCalculator(Cmfd* spectrum_calculator) {
 
 #ifdef MPIx
   if (_domain_decomposed) {
-    spectrum_calculator->setNumDomains(_num_domains_x, _num_domains_y, 
+    spectrum_calculator->setNumDomains(_num_domains_x, _num_domains_y,
                                        _num_domains_z);
     spectrum_calculator->setDomainIndexes(_domain_index_x, _domain_index_y,
                                           _domain_index_z);
@@ -3536,8 +3536,8 @@ std::vector<double> Geometry::getUniqueZPlanes() {
 /**
  * @brief Prints all Geometry and Material details to a Geometry restart file.
  * @param filename The name of the file where the data is printed
- * @param non_uniform_lattice Whether the non-uniform lattice is used to create 
- *        geometry This is to make the code compatible with old version of .geo 
+ * @param non_uniform_lattice Whether the non-uniform lattice is used to create
+ *        geometry This is to make the code compatible with old version of .geo
  *        files.
  */
 void Geometry::dumpToFile(std::string filename, bool non_uniform_lattice) {
@@ -4173,11 +4173,13 @@ void Geometry::loadFromFile(std::string filename, bool non_uniform_lattice,
         i_subnodes.push_back(num_subnodes+1);
 
       /* Remove zero values from subnode vector, and go up in region tree */
-      for (iter=i_subnodes.begin(); iter<i_subnodes.end(); iter++) {
+      for (iter=i_subnodes.begin(); iter<i_subnodes.end(); ) {
         if ((*iter) == 0) {
           i_subnodes.erase(iter);
           all_cells[key]->goUpOneRegionLogical();
         }
+        else
+          iter++;
       }
 
       /* Add surface */
