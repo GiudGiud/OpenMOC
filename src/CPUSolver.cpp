@@ -138,10 +138,10 @@ void CPUSolver::setNumThreads(int num_threads) {
   /* Check the MPI library has enough thread support */
   int provided;
   MPI_Query_thread(&provided);
-  if (num_threads > 1 && provided < MPI_THREAD_SERIALIZED)
+  if (num_threads > 1 && provided < MPI_THREAD_MULTIPLE)
     log_printf(WARNING, "Not enough thread support level in the MPI library, "
                "re-compile with another library. Thread support level should"
-               "be at least MPI_THREAD_SERIALIZED.");
+               "be at least MPI_THREAD_MULTIPLE.");
 #endif
 
   if (_track_generator != NULL && num_threads > 1)
@@ -1089,6 +1089,7 @@ void CPUSolver::transferAllInterfaceFluxes() {
 
     /* Set size of received messages, adjust buffer if needed */
     _timer->startTimer();
+#pragma omp parallel for
     for (int i=0; i < num_domains; i++) {
 
       /* Size of received message, in number of tracks */
@@ -1112,6 +1113,7 @@ void CPUSolver::transferAllInterfaceFluxes() {
 
     /* Send and receive from all neighboring domains */
     bool communication_complete = true;
+#pragma omp parallel for
     for (int i=0; i < num_domains; i++) {
 
       /* Get the communicating neighbor domain */
@@ -1171,6 +1173,7 @@ void CPUSolver::transferAllInterfaceFluxes() {
 
     /* Reset status for next communication round and copy fluxes */
     _timer->startTimer();
+#pragma omp parallel for
     for (int i=0; i < num_domains; i++) {
 
       /* Reset send */
