@@ -1223,17 +1223,21 @@ void CPUSolver::transferAllInterfaceFluxes() {
                     packing_indexes.at(i_next))) {
 
                   /* Keep track of the send buffer prefilling */
-                  int buffer_index = _send_buffers_index.at(i_next);
+                  int buffer_index;
+#pragma omp atomic capture
+                  buffer_index = _send_buffers_index.at(i_next)++;
                   buffer_index *= _track_message_size;
-                  _send_buffers_index.at(i_next)++;
 
-                  if (buffer_index >= _send_buffers.at(i_next).size()) {
-                    log_printf(WARNING, "MPI angular flux communication buffer"
-                               " from rank %d to %d overflowed. Buffer memory "
-                               "increased dynamically.", rank, send_domain);
-                    _send_buffers.at(i_next).resize(_send_buffers.at(
-                          i_next).size() + TRACKS_PER_BUFFER *
-                          _track_message_size);
+#pragma omp critical
+                  {
+                    if (buffer_index >= _send_buffers.at(i_next).size()) {
+                      log_printf(WARNING, "MPI angular flux communication buffer"
+                                 " from rank %d to %d overflowed. Buffer memory "
+                                 "increased dynamically.", rank, send_domain);
+                      _send_buffers.at(i_next).resize(_send_buffers.at(
+                            i_next).size() + TRACKS_PER_BUFFER *
+                            _track_message_size);
+                    }
                   }
 
                   /* Copy flux, direction and next track in send_buffer */
