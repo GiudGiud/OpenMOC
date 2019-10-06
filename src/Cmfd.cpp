@@ -833,6 +833,10 @@ void Cmfd::collapseXS() {
             tot = fsr_material->getSigmaTByGroup(h+1);
             nu_fis = fsr_material->getNuSigmaFByGroup(h+1);
 
+            /* Use CMFD flux from previous iteration instead of negative flux */
+            if (flux <= 0 && _moc_iteration > 0)
+              flux = _new_flux->getValue(i, e);
+
             /* Increment tallies for this group */
             total_tally += tot * flux * volume;
             nu_fission_tally += nu_fis * flux * volume;
@@ -881,7 +885,7 @@ void Cmfd::collapseXS() {
 
           /* Avoid excessive downscatter */
           for (int g = 0; g < _num_cmfd_groups; g++)
-            scat_tally[g] = 0;
+            scat_tally[g] = 0.;
         }
 
         cell_material->setSigmaTByGroup(total_tally / rxn_tally, e + 1);
@@ -1498,7 +1502,10 @@ void Cmfd::updateMOCFlux() {
         for (int h = _group_indices[e]; h < _group_indices[e + 1]; h++) {
 
           /* Update FSR flux using ratio of old and new CMFD flux */
-          _FSR_fluxes[*iter*_num_moc_groups + h] *= update_ratio;
+          if (_FSR_fluxes[*iter*_num_moc_groups + h] > 1.1e-20)
+            _FSR_fluxes[*iter*_num_moc_groups + h] *= update_ratio;
+          else
+            _FSR_fluxes[*iter*_num_moc_groups + h] = _new_flux->getValue(i, e);
 
           /* Update flux moments if they were set */
           if (_linear_source) {

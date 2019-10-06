@@ -184,6 +184,12 @@ void Timer::reduceTimer(MPI_Comm comm) {
 
     /* Collapse timing results down to one value for each category */
     double curr_split = (*iter).second;
+
+    int HOST_NAME_MAX=500;
+    char hostname[HOST_NAME_MAX];
+    gethostname(hostname, HOST_NAME_MAX);
+    log_printf(NODAL, "%s %s %e s", &(*iter).first[0], hostname, curr_split);
+
     double total_split = 0;
     MPI_Reduce(&curr_split, &total_split, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
 
