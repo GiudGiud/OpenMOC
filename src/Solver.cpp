@@ -2585,6 +2585,9 @@ void Solver::loadDFFromFile(std::string filename, int num_surfaces){
   int p = -1;
   int s = 0;
   int _num_polar_2 = _num_polar / 2;
+  int num_polar = _num_polar_2;
+  if (_SOLVE_3D)
+    num_polar = _num_polar;
 
   while( std::getline(input, line) ) {
 
@@ -2602,16 +2605,16 @@ void Solver::loadDFFromFile(std::string filename, int num_surfaces){
     size_t next = 0;
     int g = 0;
     while ((next = line.find(' ', last)) != std::string::npos) {
-      _df[1 + s*_num_polar + p][g] = std::stod(line.substr(last, next-last));
+      _df.at(1 + s*num_polar + p).at(g) = std::stod(line.substr(last, next-last));
       if (_SOLVE_3D)
-        _df[1 + s*_num_polar + (_num_polar - 1 - p)][g] = _df[s*_num_polar + p][g];
+        _df.at(1 + s*_num_polar + (_num_polar - 1 - p)).at(g) = _df.at(1 + s*_num_polar + p).at(g);
 
       last = next + 1;
       g++;
     }
-    _df[1 + s*_num_polar + p][g] = std::stod(line.substr(last));
+    _df.at(1 + s*num_polar + p).at(g) = std::stod(line.substr(last));
     if (_SOLVE_3D)
-      _df[1 + s*_num_polar + (_num_polar -1 - p)][g] = _df[s*_num_polar + p][g];
+      _df.at(1 + s*_num_polar + (_num_polar - 1 - p)).at(g) = _df.at(1 + s*_num_polar + p).at(g);
   }
   input.close();
 }
