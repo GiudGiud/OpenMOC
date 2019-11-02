@@ -1,5 +1,6 @@
 #include "CPUSolver.h"
 #include <unordered_map>
+#include <numeric>
 
 /**
  * @brief Constructor initializes array pointers for Tracks and Materials.
@@ -20,6 +21,7 @@ CPUSolver::CPUSolver(TrackGenerator* track_generator)
   _MPI_requests = NULL;
   _MPI_sends = NULL;
   _MPI_receives = NULL;
+  _neighbor_connections.clear();
 #endif
 }
 
@@ -58,15 +60,15 @@ int CPUSolver::getNumThreads() {
  *          fluxes = solver.getFluxes(num_fluxes)
  * @endcode
  *
- * @param fluxes an array of FSR scalar fluxes in each energy group
+ * @param out_fluxes an array of FSR scalar fluxes in each energy group
  * @param num_fluxes the total number of FSR flux values
  */
 void CPUSolver::getFluxes(FP_PRECISION* out_fluxes, int num_fluxes) {
 
-  if (num_fluxes != _num_groups * _geometry->getNumTotalFSRs())
+  if (num_fluxes != _NUM_GROUPS * _geometry->getNumTotalFSRs())
     log_printf(ERROR, "Unable to get FSR scalar fluxes since there are "
                "%d groups and %d FSRs which does not match the requested "
-               "%d flux values", _num_groups, _geometry->getNumTotalFSRs(),
+               "%d flux values", _NUM_GROUPS, _geometry->getNumTotalFSRs(),
                num_fluxes);
 
   else if (_scalar_flux == NULL)
@@ -77,8 +79,8 @@ void CPUSolver::getFluxes(FP_PRECISION* out_fluxes, int num_fluxes) {
   else {
 #pragma omp parallel for schedule(static)
     for (long r=0; r < _num_FSRs; r++) {
-      for (int e=0; e < _num_groups; e++)
-        out_fluxes[r*_num_groups+e] = _scalar_flux(r,e);
+      for (int e=0; e < _NUM_GROUPS; e++)
+        out_fluxes[r*_NUM_GROUPS+e] = _scalar_flux(r,e);
     }
   }
   /* Reduce domain data for domain decomposition */
@@ -87,7 +89,7 @@ void CPUSolver::getFluxes(FP_PRECISION* out_fluxes, int num_fluxes) {
 
     /* Allocate buffer for communication */
     long num_total_FSRs = _geometry->getNumTotalFSRs();
-    FP_PRECISION* temp_fluxes = new FP_PRECISION[num_total_FSRs*_num_groups];
+    FP_PRECISION* temp_fluxes = new FP_PRECISION[num_total_FSRs*_NUM_GROUPS];
 
     int rank = 0;
     MPI_Comm comm = _geometry->getMPICart();
@@ -101,11 +103,11 @@ void CPUSolver::getFluxes(FP_PRECISION* out_fluxes, int num_fluxes) {
 
       /* Set data if in the correct domain */
       if (domain == rank)
-        for (int e=0; e < _num_groups; e++)
-          temp_fluxes[r*_num_groups+e] = out_fluxes[fsr_id*_num_groups+e];
+        for (int e=0; e < _NUM_GROUPS; e++)
+          temp_fluxes[r*_NUM_GROUPS+e] = out_fluxes[fsr_id*_NUM_GROUPS+e];
       else
-        for (int e=0; e < _num_groups; e++)
-          temp_fluxes[r*_num_groups+e] = 0.0;
+        for (int e=0; e < _NUM_GROUPS; e++)
+          temp_fluxes[r*_NUM_GROUPS+e] = 0.0;
     }
 
     /* Determine the type of FP_PRECISION and communicate fluxes */
@@ -115,7 +117,7 @@ void CPUSolver::getFluxes(FP_PRECISION* out_fluxes, int num_fluxes) {
     else
       flux_type = MPI_DOUBLE;
 
-    MPI_Allreduce(temp_fluxes, out_fluxes, num_total_FSRs*_num_groups,
+    MPI_Allreduce(temp_fluxes, out_fluxes, num_total_FSRs*_NUM_GROUPS,
                   flux_type, MPI_SUM, comm);
     delete [] temp_fluxes;
   }
@@ -146,7 +148,7 @@ void CPUSolver::setNumThreads(int num_threads) {
     if ((_track_generator->getSegmentFormation() == OTF_STACKS ||
        _track_generator->getSegmentFormation() == OTF_TRACKS) &&
        _track_generator->getNumThreads() != num_threads)
-      log_printf(WARNING, "The number of threads used in track generation (%d)"
+      log_printf(WARNING, "The number of threads used in track generation (%d) "
                  "should match the number of threads used in the solver (%d) "
                  "for OTF ray-tracing methods, as threaded buffers are shared.",
                  _track_generator->getNumThreads(), num_threads);
@@ -159,9 +161,9 @@ void CPUSolver::setNumThreads(int num_threads) {
 
 /**
  * @brief Set the flux array for use in transport sweep source calculations.
- * @detail This is a helper method for the checkpoint restart capabilities,
- *         as well as the IRAMSolver in the openmoc.krylov submodule. This
- *         routine may be used as follows from within Python:
+ * @details This is a helper method for the checkpoint restart capabilities,
+ *          as well as the IRAMSolver in the openmoc.krylov submodule. This
+ *          routine may be used as follows from within Python:
  *
  * @code
  *          fluxes = numpy.random.rand(num_FSRs * num_groups, dtype=np.float)
@@ -176,9 +178,9 @@ void CPUSolver::setNumThreads(int num_threads) {
  * @param num_fluxes the number of flux values (# groups x # FSRs)
  */
 void CPUSolver::setFluxes(FP_PRECISION* in_fluxes, int num_fluxes) {
-  if (num_fluxes != _num_groups * _num_FSRs)
+  if (num_fluxes != _NUM_GROUPS * _num_FSRs)
     log_printf(ERROR, "Unable to set an array with %d flux values for %d "
-               " groups and %d FSRs", num_fluxes, _num_groups, _num_FSRs);
+               " groups and %d FSRs", num_fluxes, _NUM_GROUPS, _num_FSRs);
 
   /* Allocate array if flux arrays have not yet been initialized */
   if (_scalar_flux == NULL)
@@ -206,7 +208,7 @@ void CPUSolver::setFixedSourceByFSR(long fsr_id, int group,
 
   /* Allocate the fixed sources array if not yet allocated */
   if (_fixed_sources == NULL) {
-    long size = _num_FSRs * _num_groups;
+    long size = _num_FSRs * _NUM_GROUPS;
     _fixed_sources = new FP_PRECISION[size]();
   }
 
@@ -264,7 +266,7 @@ void CPUSolver::initializeFluxArrays() {
 
   if (_old_scalar_flux != NULL)
     delete [] _old_scalar_flux;
-  
+
   if (_stabilizing_flux != NULL)
     delete [] _stabilizing_flux;
 
@@ -286,11 +288,16 @@ void CPUSolver::initializeFluxArrays() {
 #endif
     double max_size_mb = (double) (2 * max_size * sizeof(float))
         / (double) (1e6);
+#ifdef ONLYVACUUMBC
+    max_size_mb /= 2;
+#endif
     log_printf(NORMAL, "Max boundary angular flux storage per domain = %6.2f "
                "MB", max_size_mb);
 
     _boundary_flux = new float[size]();
+#ifndef ONLYVACUUMBC
     _start_flux = new float[size]();
+#endif
 
     /* Allocate memory for boundary leakage if necessary. CMFD is not set in
        solver at this point, so the value of _cmfd is always NULL as initial
@@ -300,7 +307,7 @@ void CPUSolver::initializeFluxArrays() {
     }
 
     /* Determine the size of arrays for the FSR scalar fluxes */
-    size = _num_FSRs * _num_groups;
+    size = _num_FSRs * _NUM_GROUPS;
     max_size = size;
 #ifdef MPIX
     if (_geometry->isDomainDecomposed())
@@ -321,6 +328,12 @@ void CPUSolver::initializeFluxArrays() {
     /* Allocate scalar fluxes */
     _scalar_flux = new FP_PRECISION[size]();
     _old_scalar_flux = new FP_PRECISION[size]();
+
+#ifdef ONLYVACUUMBC
+    _track_flux_sent.resize(2);
+    _track_flux_sent.at(0).resize(_tot_num_tracks, false);
+    _track_flux_sent.at(1).resize(_tot_num_tracks, false);
+#endif
 
     /* Allocate stabilizing flux vector if necessary */
     if (_stabilize_transport) {
@@ -353,7 +366,7 @@ void CPUSolver::initializeSourceArrays() {
   if (_fixed_sources != NULL)
     delete [] _fixed_sources;
 
-  long size = _num_FSRs * _num_groups;
+  long size = _num_FSRs * _NUM_GROUPS;
 
   /* Allocate memory for all source arrays */
   _reduced_sources = new FP_PRECISION[size]();
@@ -400,9 +413,9 @@ void CPUSolver::initializeFixedSources() {
     fsr_id = fsr_group_key.first;
     group = fsr_group_key.second;
 
-    if (group <= 0 || group > _num_groups)
+    if (group <= 0 || group > _NUM_GROUPS)
       log_printf(ERROR,"Unable to use fixed source for group %d in "
-                 "a %d energy group problem", group, _num_groups);
+                 "a %d energy group problem", group, _NUM_GROUPS);
 
     if (fsr_id < 0 || fsr_id >= _num_FSRs)
       log_printf(ERROR,"Unable to use fixed source for FSR %d with only "
@@ -424,7 +437,9 @@ void CPUSolver::zeroTrackFluxes() {
     for (int d=0; d < 2; d++) {
       for (int pe=0; pe < _fluxes_per_track; pe++) {
         _boundary_flux(t, d, pe) = 0.0;
+#ifndef ONLYVACUUMBC
         _start_flux(t, d, pe) = 0.0;
+#endif
       }
     }
   }
@@ -438,12 +453,10 @@ void CPUSolver::zeroTrackFluxes() {
 void CPUSolver::copyBoundaryFluxes() {
 
 #pragma omp parallel for schedule(static)
-  for (long t=0; t < _tot_num_tracks; t++) {
-    for (int d=0; d < 2; d++) {
+  for (long t=0; t < _tot_num_tracks; t++)
+    for (int d=0; d < 2; d++)
       for (int pe=0; pe < _fluxes_per_track; pe++)
         _boundary_flux(t,d,pe) = _start_flux(t, d, pe);
-    }
-  }
 }
 
 
@@ -503,7 +516,7 @@ void CPUSolver::setupMPIBuffers() {
 
   /* Determine the size of the buffers */
   _track_message_size = _fluxes_per_track + 3;
-  int length = TRACKS_PER_BUFFER * _track_message_size;
+  int message_length = TRACKS_PER_BUFFER * _track_message_size;
 
   /* Initialize MPI requests and status */
   if (_geometry->isDomainDecomposed()) {
@@ -514,7 +527,6 @@ void CPUSolver::setupMPIBuffers() {
     log_printf(NORMAL, "Setting up MPI Buffers for angular flux exchange...");
 
     /* Fill the hash map of send buffers */
-    std::unordered_map<int, int> neighbor_connections;
     int idx = 0;
     for (int dx=-1; dx <= 1; dx++) {
       for (int dy=-1; dy <= 1; dy++) {
@@ -523,27 +535,48 @@ void CPUSolver::setupMPIBuffers() {
               (dx == 0 && dy == 0 && dz != 0)) {
             int domain = _geometry->getNeighborDomain(dx, dy, dz);
             if (domain != -1) {
-              neighbor_connections.insert({domain, idx});
-              float* send_buffer = new float[length];
-              _send_buffers.push_back(send_buffer);
-              float* receive_buffer = new float[length];
-              _receive_buffers.push_back(receive_buffer);
+              _neighbor_connections.insert({domain, idx});
               _neighbor_domains.push_back(domain);
               idx++;
+
+              /* Inititalize vector that shows how filled send_buffers are */
+              _send_buffers_index.push_back(0);
             }
           }
         }
       }
     }
 
-    /* Setup Track communication information for all neighbor domains */
+    /* Estimate and print size of flux transfer buffers */
     int num_domains = _neighbor_domains.size();
+    int size = 2 * message_length * num_domains * sizeof(float);
+    int max_size;
+    MPI_Allreduce(&size, &max_size, 1, MPI_INT, MPI_MAX,
+                  _geometry->getMPICart());
+    log_printf(INFO_ONCE, "Max track fluxes transfer buffer storage = %.2f MB",
+               max_size / 1e6);
+
+    /* Allocate track fluxes transfer buffers */
+    _send_buffers.resize(num_domains);
+    _receive_buffers.resize(num_domains);
+    for (int i=0; i < num_domains; i++) {
+#ifdef ONLYVACUUMBC
+      /* Increase capacity because buffers will overflow and need a resize */
+      _send_buffers.at(i).reserve(3*message_length);
+      _receive_buffers.at(i).reserve(3*message_length);
+#endif
+      _send_buffers.at(i).resize(message_length);
+      _receive_buffers.at(i).resize(message_length);
+    }
+
+    /* Setup Track communication information for all neighbor domains */
     _boundary_tracks.resize(num_domains);
     for (int i=0; i < num_domains; i++) {
 
       /* Initialize Track ID's to -1 */
       int start_idx = _fluxes_per_track + 1;
-      for (int idx = start_idx; idx < length; idx += _track_message_size) {
+      for (int idx = start_idx; idx < message_length;
+           idx += _track_message_size) {
         long* track_info_location =
              reinterpret_cast<long*>(&_send_buffers.at(i)[idx]);
         track_info_location[0] = -1;
@@ -553,16 +586,26 @@ void CPUSolver::setupMPIBuffers() {
       }
     }
 
+    /* Allocate vector of send/receive buffer sizes */
+    _send_size.resize(num_domains, 0);
+    _receive_size.resize(num_domains, 0);
+
     /* Build array of Track connections */
     _track_connections.resize(2);
     _track_connections.at(0).resize(_tot_num_tracks);
     _track_connections.at(1).resize(_tot_num_tracks);
 
+#ifdef ONLYVACUUMBC
+    _domain_connections.resize(2);
+    _domain_connections.at(0).resize(_tot_num_tracks);
+    _domain_connections.at(1).resize(_tot_num_tracks);
+#endif
+
     /* Determine how many Tracks communicate with each neighbor domain */
     log_printf(NORMAL, "Initializing Track connections accross domains...");
-    long num_tracks[num_domains];
-    for (int i=0; i < num_domains; i++)
-      num_tracks[i] = 0;
+    std::vector<long> num_tracks;
+    num_tracks. resize(num_domains, 0);
+
 #pragma omp parallel for
     for (long t=0; t<_tot_num_tracks; t++) {
 
@@ -595,8 +638,8 @@ void CPUSolver::setupMPIBuffers() {
       interface[1] = track->getBCBwd() == INTERFACE;
       for (int d=0; d < 2; d++) {
         if (domains[d] != -1 && interface[d]) {
-          int neighbor = neighbor_connections.at(domains[d]);
-#pragma omp atomic
+          int neighbor = _neighbor_connections.at(domains[d]);
+#pragma omp atomic update
           num_tracks[neighbor]++;
         }
       }
@@ -612,7 +655,9 @@ void CPUSolver::setupMPIBuffers() {
     }
 
     /* Determine which Tracks communicate with each neighbor domain */
+#ifndef ONLYVACUUMBC
 #pragma omp parallel for
+#endif
     for (long t=0; t<_tot_num_tracks; t++) {
 
       Track* track;
@@ -640,7 +685,7 @@ void CPUSolver::setupMPIBuffers() {
       interface[1] = track->getBCBwd() == INTERFACE;
       for (int d=0; d < 2; d++) {
         if (domains[d] != -1 && interface[d]) {
-          int neighbor = neighbor_connections.at(domains[d]);
+          int neighbor = _neighbor_connections.at(domains[d]);
 
           long slot;
 #pragma omp atomic capture
@@ -648,14 +693,30 @@ void CPUSolver::setupMPIBuffers() {
             slot = num_tracks[neighbor];
             num_tracks[neighbor]++;
           }
-
           _boundary_tracks.at(neighbor).at(slot) = 2*t + d;
+#ifdef ONLYVACUUMBC
+          //NOTE _boundary_tracks needs to be ordered if ONLYVACUUMBC is used
+          _domain_connections.at(d).at(t) = domains[d];
+#endif
         }
+#ifdef ONLYVACUUMBC
+        /* Keep a list of the tracks that start at vacuum BC */
+        else {
+#pragma omp critical
+          {
+            _tracks_from_vacuum.push_back(2*t + 1 - d);
+          }
+          //NOTE domains[d] can be set for a track ending on an interface
+          // with vacuum and another track
+          _domain_connections.at(d).at(t) = -1;
+        }
+#endif
       }
       if (_SOLVE_3D)
         delete track;
     }
 
+    printLoadBalancingReport();
     log_printf(NORMAL, "Finished setting up MPI buffers...");
 
     /* Setup MPI communication bookkeeping */
@@ -676,12 +737,12 @@ void CPUSolver::setupMPIBuffers() {
  */
 void CPUSolver::deleteMPIBuffers() {
   for (int i=0; i < _send_buffers.size(); i++) {
-    delete [] _send_buffers.at(i);
+    _send_buffers.at(i).clear();
   }
   _send_buffers.clear();
 
   for (int i=0; i < _receive_buffers.size(); i++) {
-    delete [] _receive_buffers.at(i);
+    _receive_buffers.at(i).clear();
   }
   _receive_buffers.clear();
   _neighbor_domains.clear();
@@ -694,8 +755,40 @@ void CPUSolver::deleteMPIBuffers() {
   delete [] _MPI_sends;
   delete [] _MPI_receives;
 }
+#endif
 
 
+#ifdef ONLYVACUUMBC
+/**
+ * @brief Resets the track angular fluxes at the vacuum boundary condition.
+ */
+void CPUSolver::resetBoundaryFluxes() {
+
+  if (_geometry->isDomainDecomposed()) {
+    log_printf(INFO, "Setting %ld incoming vaccum boundary fluxes to 0.",
+               _tracks_from_vacuum.size());
+
+#pragma omp parallel for
+    for (long i=0; i < _tracks_from_vacuum.size(); i++) {
+
+      long t_id = _tracks_from_vacuum.at(i) / 2;
+      int dir = _tracks_from_vacuum.at(i) - 2 * t_id;
+      for (int pe=0; pe < _fluxes_per_track; pe++)
+        _boundary_flux(t_id, dir, pe) = 0.;
+    }
+  }
+  else {
+#pragma omp parallel for
+    for (long t=0; t < _tot_num_tracks; t++)
+      for (int d=0; d < 2; d++)
+        for (int pe=0; pe < _fluxes_per_track; pe++)
+          _boundary_flux(t,d,pe) = 0.;
+  }
+}
+#endif
+
+
+#ifdef MPIx
 /**
  * @brief Prints out tracking information for cycles, traversing domain
  *        interfaces.
@@ -846,34 +939,55 @@ void CPUSolver::printCycle(long track_start, int domain_start, int length) {
  *          associated buffer is full. This provided integer array contains
  *          the index of the last track handled for each neighboring domain.
  *          These numbers are updated at the end with the last track handled.
+ * @arg packing_indexes index of last track sent for each neighbor domain
  */
 void CPUSolver::packBuffers(std::vector<long> &packing_indexes) {
 
   /* Fill send buffers for every domain */
   int num_domains = packing_indexes.size();
+#pragma omp parallel for num_threads(num_domains)
   for (int i=0; i < num_domains; i++) {
-    int send_domain = _neighbor_domains.at(i);
 
-    /* Reset send buffers */
-    int start_idx = _fluxes_per_track + 1;
+    /* Reset send buffers : start at beginning if the buffer has not been
+       prefilled, else start after what has been prefilled */
+    int start_idx = _send_buffers_index.at(i) * _track_message_size +
+                    _fluxes_per_track + 1;
     int max_idx = _track_message_size * TRACKS_PER_BUFFER;
-#pragma omp parallel for
+#pragma omp parallel for num_threads(_num_threads / num_domains)
     for (int idx = start_idx; idx < max_idx; idx += _track_message_size) {
       long* track_info_location =
         reinterpret_cast<long*>(&_send_buffers.at(i)[idx]);
       track_info_location[0] = -1;
     }
 
-    /* Fill send buffers with Track information */
+    /* Fill send buffers with Track information :
+       -start from last track packed (packing_indexes)
+       -take into account the pre-filling
+       (pre-filling only if ONLYVACUUMBC flag is used)
+       -only fill to max_buffer_fill */
     int max_buffer_idx = _boundary_tracks.at(i).size() -
           packing_indexes.at(i);
-    if (max_buffer_idx > TRACKS_PER_BUFFER)
-      max_buffer_idx = TRACKS_PER_BUFFER;
-#pragma omp parallel for
+
+    if (_send_buffers_index.at(i) + max_buffer_idx > TRACKS_PER_BUFFER)
+      max_buffer_idx = TRACKS_PER_BUFFER - _send_buffers_index.at(i);
+
+    /* Keep track of buffer size to avoid sending more fluxes than needed */
+    _send_size.at(i) = std::max(_send_buffers_index.at(i) + max_buffer_idx,
+         _send_buffers_index.at(i));
+
+#ifndef ONLYVACUUMBC
+#pragma omp parallel for num_threads(_num_threads / num_domains)
+#endif
     for (int b=0; b < max_buffer_idx; b++) {
 
       long boundary_track_idx = packing_indexes.at(i) + b;
-      long buffer_index = b * _track_message_size;
+      long buffer_index = (_send_buffers_index.at(i)+b) * _track_message_size;
+
+#ifdef ONLYVACUUMBC
+      /* Exit loop if all fluxes have been sent */
+      if (boundary_track_idx >= _boundary_tracks.at(i).size())
+        break;
+#endif
 
       /* Get 3D Track data */
       long boundary_track = _boundary_tracks.at(i).at(boundary_track_idx);
@@ -886,15 +1000,27 @@ void CPUSolver::packBuffers(std::vector<long> &packing_indexes) {
         _send_buffers.at(i)[buffer_index + pe] = _boundary_flux(t,d,pe);
 
       /* Assign the connecting Track information */
-      int idx = buffer_index + _fluxes_per_track;
+      long idx = buffer_index + _fluxes_per_track;
       _send_buffers.at(i)[idx] = d;
       long* track_info_location =
         reinterpret_cast<long*>(&_send_buffers.at(i)[idx+1]);
       track_info_location[0] = connect_track;
+
+ #ifdef ONLYVACUUMBC
+      /* Invalidate track transfer if it has already been sent by prefilling */
+      if (_track_flux_sent.at(d).at(t)) {
+        track_info_location[0] = long(-2);
+
+        /* Use freed-up spot in send_buffer and keep track of it */
+        b--;
+        packing_indexes.at(i)++;
+      }
+#endif
     }
 
-    /* Record the next Track ID */
-    packing_indexes.at(i) += max_buffer_idx;
+    /* Record the next Track ID, reset index of fluxes in send_buffers */
+    packing_indexes.at(i) += std::max(0, max_buffer_idx);
+    _send_buffers_index.at(i) = 0;
   }
 }
 
@@ -912,7 +1038,7 @@ void CPUSolver::transferAllInterfaceFluxes() {
   MPI_Comm MPI_cart = _geometry->getMPICart();
   MPI_Status stat;
 
-  /* Wait for all MPI Ranks to be done with communication */
+  /* Wait for all MPI Ranks to be done with sweeping */
   _timer->startTimer();
   MPI_Barrier(MPI_cart);
   _timer->stopTimer();
@@ -920,6 +1046,10 @@ void CPUSolver::transferAllInterfaceFluxes() {
 
   /* Initialize timer for total transfer cost */
   _timer->startTimer();
+
+  /* Get rank of each process */
+  int rank;
+  MPI_Comm_rank(MPI_cart, &rank);
 
   /* Create bookkeeping vectors */
   std::vector<long> packing_indexes;
@@ -929,10 +1059,10 @@ void CPUSolver::transferAllInterfaceFluxes() {
   packing_indexes.resize(num_domains);
 
   /* Start communication rounds */
+  int round_counter = -1;
   while (true) {
 
-    int rank;
-    MPI_Comm_rank(MPI_cart, &rank);
+    round_counter++;
 
     /* Pack buffers with angular flux data */
     _timer->startTimer();
@@ -940,39 +1070,120 @@ void CPUSolver::transferAllInterfaceFluxes() {
     _timer->stopTimer();
     _timer->recordSplit("Packing time");
 
-    /* Send and receive from all neighboring domains */
+#ifdef ONLYVACUUMBC
+    /* Number of communication rounds is bounded */
+    long max_boundary_tracks = 0;
+    for (int i=0; i < num_domains; i++)
+      max_boundary_tracks = std::max(max_boundary_tracks,
+                                     long(_boundary_tracks.at(i).size()));
+    bool active_communication =
+         max_boundary_tracks > (round_counter * TRACKS_PER_BUFFER);
+
+    MPI_Request _MPI_req[2*num_domains];
+#endif
+
+    /* Set size of received messages, adjust buffer if needed */
     _timer->startTimer();
-    bool communication_complete = true;
     for (int i=0; i < num_domains; i++) {
 
-      /* Get the communicating neighbor domain */
+      /* Size of received message, in number of tracks */
+      _receive_size.at(i) = TRACKS_PER_BUFFER;
+
+#ifdef ONLYVACUUMBC
+      _receive_size.at(i) = -1;
       int domain = _neighbor_domains.at(i);
-
-      /* Check if a send/receive needs to be created */
-      long* first_track_idx =
-        reinterpret_cast<long*>(&_send_buffers.at(i)[_fluxes_per_track+1]);
-      long first_track = first_track_idx[0];
-      if (first_track != -1) {
-
-        /* Send outgoing flux */
-        MPI_Isend(_send_buffers.at(i), _track_message_size *
-                  TRACKS_PER_BUFFER, MPI_FLOAT, domain, 0, MPI_cart,
-                  &_MPI_requests[i*2]);
-        _MPI_sends[i] = true;
-
-        /* Receive incoming flux */
-        MPI_Irecv(_receive_buffers.at(i), _track_message_size *
-                  TRACKS_PER_BUFFER, MPI_FLOAT, domain, 0, MPI_cart,
-                  &_MPI_requests[i*2+1]);
-        _MPI_receives[i] = true;
-
-        /* Mark communication as ongoing */
-        communication_complete = false;
+      if (active_communication) {
+        /* Communicate _send_buffers' sizes to adapt _receive_buffers' sizes */
+        MPI_Isend(&_send_size.at(i), 1, MPI_INT, domain, 0, MPI_cart,
+                  &_MPI_req[i*2]);
+        MPI_Irecv(&_receive_size.at(i), 1, MPI_INT, domain, 0, MPI_cart,
+                  &_MPI_req[i*2 + 1]);
       }
       else {
-        _MPI_requests[i*2] = MPI_REQUEST_NULL;
-        _MPI_requests[i*2+1] = MPI_REQUEST_NULL;
+        _MPI_req[i*2] = MPI_REQUEST_NULL;
+        _MPI_req[i*2 + 1] = MPI_REQUEST_NULL;
       }
+#endif
+    }
+
+    /* Send and receive from all neighboring domains */
+    bool communication_complete = true;
+
+#ifdef ONLYVACUUMBC
+    /* Start all sends and receives when the buffers' sizes are known to
+       reduce synchronization */
+    bool all_transfers_started = false;
+    while (!all_transfers_started) {
+      all_transfers_started = true;
+#endif
+      for (int i=0; i < num_domains; i++) {
+
+        /* Get the communicating neighbor domain */
+        int domain = _neighbor_domains.at(i);
+
+#ifndef ONLYVACUUMBC
+        /* Check if a send/receive needs to be created */
+        long* first_track_idx =
+          reinterpret_cast<long*>(&_send_buffers.at(i)[_fluxes_per_track+1]);
+        long first_track = first_track_idx[0];
+
+        if (first_track != -1) {
+#else
+        /* Send/receive fluxes if there are fluxes to be sent, if the size of
+           the message is known and if they haven't been sent already */
+        if (active_communication) {
+#endif
+          /* Send outgoing flux */
+          if (_send_size.at(i) > 0 && !_MPI_sends[i]) {
+            MPI_Isend(&_send_buffers.at(i)[0], _track_message_size *
+                      _send_size.at(i), MPI_FLOAT, domain, 1, MPI_cart,
+                      &_MPI_requests[i*2]);
+            _MPI_sends[i] = true;
+          }
+          else
+            if (!_MPI_sends[i])
+              _MPI_requests[i*2] = MPI_REQUEST_NULL;
+
+          /* Receive incoming flux */
+          if (_receive_size.at(i) > 0 && !_MPI_receives[i]) {
+
+#ifdef ONLYVACUUMBC
+            /* Adjust receiving buffer if incoming message is too large */
+            if (_num_iterations == 0)
+              if (_receive_size.at(i) > _receive_buffers.at(i).size() /
+                                        _track_message_size)
+                _receive_buffers.at(i).resize(_receive_size.at(i) *
+                                              _track_message_size);
+#endif
+
+            MPI_Irecv(&_receive_buffers.at(i)[0], _track_message_size *
+                      _receive_size.at(i), MPI_FLOAT, domain, 1, MPI_cart,
+                      &_MPI_requests[i*2+1]);
+            _MPI_receives[i] = true;
+          }
+          else
+            if (!_MPI_receives[i])
+              _MPI_requests[i*2+1] = MPI_REQUEST_NULL;
+
+          /* Mark communication as ongoing */
+          communication_complete = false;
+        }
+        else {
+          if (!_MPI_sends[i])
+            _MPI_requests[i*2] = MPI_REQUEST_NULL;
+          if (!_MPI_receives[i])
+            _MPI_requests[i*2+1] = MPI_REQUEST_NULL;
+        }
+#ifdef ONLYVACUUMBC
+        /* Check that all MPI receive calls have been made */
+        if (active_communication && !_MPI_receives[i] && _receive_size.at(i) != 0) {
+          all_transfers_started = false;
+          int flag;
+          if (_receive_size.at(i) == -1)
+            MPI_Test(&_MPI_req[i*2 + 1], &flag, MPI_STATUSES_IGNORE);
+        }
+      }
+#endif
     }
 
     /* Check if communication is done */
@@ -983,9 +1194,13 @@ void CPUSolver::transferAllInterfaceFluxes() {
     }
 
     /* Block for communication round to complete */
+    //FIXME Not necessary, buffers could be unpacked while waiting
     MPI_Waitall(2 * num_domains, _MPI_requests, MPI_STATUSES_IGNORE);
+    _timer->stopTimer();
+    _timer->recordSplit("Communication time");
 
     /* Reset status for next communication round and copy fluxes */
+    _timer->startTimer();
     for (int i=0; i < num_domains; i++) {
 
       /* Reset send */
@@ -995,21 +1210,85 @@ void CPUSolver::transferAllInterfaceFluxes() {
       if (_MPI_receives[i]) {
 
         /* Get the buffer for the connecting domain */
-        float* buffer = _receive_buffers.at(i);
-        for (int t=0; t < TRACKS_PER_BUFFER; t++) {
+        for (int t=0; t < _receive_size.at(i); t++) {
 
           /* Get the Track ID */
-          float* curr_track_buffer = &buffer[t*_track_message_size];
+          float* curr_track_buffer = &_receive_buffers.at(i)[
+                                     t*_track_message_size];
           long* track_idx =
             reinterpret_cast<long*>(&curr_track_buffer[_fluxes_per_track+1]);
           long track_id = track_idx[0];
 
+          /* Break out of loop once buffer is finished */
+          if (track_id == -1)
+            break;
+
           /* Check if the angular fluxes are active */
-          if (track_id != -1) {
+          /* -2 : already transfered through pre-filling
+           * -1 : padding of buffer */
+          if (track_id > -1) {
             int dir = curr_track_buffer[_fluxes_per_track];
 
+#ifdef ONLYVACUUMBC
+            /* Before copying an incoming flux over an unsent flux, save
+             * the unsent flux in the send buffer (pre-filling) */
+
+            int send_domain = _domain_connections.at(dir).at(track_id);
+            long boundary_track = 2 * track_id + dir;
+
+            /* Only save destination flux if it doesn't go to vacuum */
+            if (send_domain >= 0) {
+              int i_next = _neighbor_connections.at(send_domain);
+
+              /* Check that all tracks to i_next haven't been sent */
+              if (packing_indexes.at(i_next) <
+                  _boundary_tracks.at(i_next).size()) {
+
+                /* Check that the current track hasn't been sent already */
+                if (boundary_track >= _boundary_tracks.at(i_next).at(
+                    packing_indexes.at(i_next))) {
+
+                  /* Keep track of the send buffer prefilling */
+                  int buffer_index = _send_buffers_index.at(i_next);
+                  buffer_index *= _track_message_size;
+                  _send_buffers_index.at(i_next)++;
+
+                  if (buffer_index >= _send_buffers.at(i_next).size()) {
+                    log_printf(WARNING, "MPI angular flux communication buffer"
+                               " from rank %d to %d overflowed. Buffer memory "
+                               "increased dynamically.", rank, send_domain);
+                    _send_buffers.at(i_next).resize(_send_buffers.at(
+                          i_next).size() + TRACKS_PER_BUFFER *
+                          _track_message_size);
+                  }
+
+                  /* Copy flux, direction and next track in send_buffer */
+                  for (int pe=0; pe < _fluxes_per_track; pe++)
+                    _send_buffers.at(i_next).at(buffer_index + pe) =
+                         _boundary_flux(track_id, dir, pe);
+                  _send_buffers.at(i_next).at(buffer_index + _fluxes_per_track) =
+                       dir;
+                  long* track_info_location =
+                       reinterpret_cast<long*>(&_send_buffers.at(i_next).at(
+                       buffer_index + _fluxes_per_track + 1));
+                  track_info_location[0] = _track_connections.at(dir).at(
+                       track_id);
+
+                  /* Remember that track flux has been placed in send buffer
+                   * to avoid sending a wrong track flux when packing buffer */
+                  //NOTE Track fluxes are always communicated in the same order
+                  if (_num_iterations == 0)
+                    _track_flux_sent.at(dir).at(track_id) = true;
+                }
+              }
+            }
+
+            for (int pe=0; pe < _fluxes_per_track; pe++)
+              _boundary_flux(track_id, dir, pe) = curr_track_buffer[pe];
+#else
             for (int pe=0; pe < _fluxes_per_track; pe++)
               _start_flux(track_id, dir, pe) = curr_track_buffer[pe];
+#endif
           }
         }
       }
@@ -1017,8 +1296,9 @@ void CPUSolver::transferAllInterfaceFluxes() {
       /* Reset receive */
       _MPI_receives[i] = false;
     }
+
     _timer->stopTimer();
-    _timer->recordSplit("Communication time");
+    _timer->recordSplit("Unpacking time");
   }
 
   /* Join MPI at the end of communication */
@@ -1418,7 +1698,7 @@ void CPUSolver::flattenFSRFluxes(FP_PRECISION value) {
 
 #pragma omp parallel for schedule(static)
   for (long r=0; r < _num_FSRs; r++) {
-    for (int e=0; e < _num_groups; e++)
+    for (int e=0; e < _NUM_GROUPS; e++)
       _scalar_flux(r,e) = value;
   }
 }
@@ -1435,7 +1715,7 @@ void CPUSolver::flattenFSRFluxesChiSpectrum() {
   FP_PRECISION* chi = _chi_spectrum_material->getChi();
 #pragma omp parallel for schedule(static)
   for (long r=0; r < _num_FSRs; r++) {
-    for (int e=0; e < _num_groups; e++)
+    for (int e=0; e < _NUM_GROUPS; e++)
       _scalar_flux(r,e) = chi[e];
   }
 }
@@ -1448,7 +1728,7 @@ void CPUSolver::storeFSRFluxes() {
 
 #pragma omp parallel for schedule(static)
   for (long r=0; r < _num_FSRs; r++) {
-    for (int e=0; e < _num_groups; e++)
+    for (int e=0; e < _NUM_GROUPS; e++)
       _old_scalar_flux(r,e) = _scalar_flux(r,e);
   }
 }
@@ -1474,11 +1754,11 @@ double CPUSolver::normalizeFluxes() {
       FP_PRECISION* nu_sigma_f = _FSR_materials[r]->getNuSigmaF();
       FP_PRECISION volume = _FSR_volumes[r];
 
-      for (int e=0; e < _num_groups; e++)
+      for (int e=0; e < _NUM_GROUPS; e++)
         group_fission_sources[e] = nu_sigma_f[e] * _scalar_flux(r,e) * volume;
 
       int_fission_sources[r] = pairwise_sum<FP_PRECISION>(group_fission_sources,
-                                                        _num_groups);
+                                                        _NUM_GROUPS);
     }
   }
 
@@ -1490,7 +1770,7 @@ double CPUSolver::normalizeFluxes() {
   long total_num_FSRs = _num_FSRs;
 
 #ifdef MPIx
-  /* Reduce total fission rates across domians */
+  /* Reduce total fission rates across domains */
   if (_geometry->isDomainDecomposed()) {
 
     /* Get the communicator */
@@ -1515,14 +1795,16 @@ double CPUSolver::normalizeFluxes() {
 
 #pragma omp parallel for schedule(static)
   for (long r=0; r < _num_FSRs; r++) {
-    for (int e=0; e < _num_groups; e++)
+    for (int e=0; e < _NUM_GROUPS; e++)
       _scalar_flux(r, e) *= norm_factor;
   }
 
   /* Normalize angular boundary fluxes for each Track */
 #pragma omp parallel for schedule(static)
   for (long idx=0; idx < 2 * _tot_num_tracks * _fluxes_per_track; idx++) {
+#ifndef ONLYVACUUMBC
     _start_flux[idx] *= norm_factor;
+#endif
     _boundary_flux[idx] *= norm_factor;
   }
 
@@ -1537,43 +1819,36 @@ double CPUSolver::normalizeFluxes() {
  */
 void CPUSolver::computeFSRSources(int iteration) {
 
+  long num_negative_fsrs = 0;
   long num_negative_sources = 0;
 
   /* For all FSRs, find the source */
 #pragma omp parallel for schedule(static)
   for (long r=0; r < _num_FSRs; r++) {
 
-    int tid = omp_get_thread_num();
     Material* material = _FSR_materials[r];
-    FP_PRECISION* nu_sigma_f = material->getNuSigmaF();
-    FP_PRECISION* chi = material->getChi();
-    FP_PRECISION* sigma_t = material->getSigmaT();
-    FP_PRECISION* fission_sources = _groupwise_scratch.at(tid);
-
-    /* Initialize the fission sources to zero */
-    FP_PRECISION fission_source = 0.0;
-
-    /* Compute fission source for each group */
-    if (material->isFissionable()) {
-      for (int e=0; e < _num_groups; e++)
-        fission_sources[e] = _scalar_flux(r,e) * nu_sigma_f[e];
-
-      fission_source = pairwise_sum<FP_PRECISION>(fission_sources,
-                                                  _num_groups);
-      fission_source /= _k_eff;
-    }
+    FP_PRECISION* sigma_s = material->getSigmaS();
+    FP_PRECISION fiss_mat;
+    FP_PRECISION fission_sources[_NUM_GROUPS];
+    FP_PRECISION scatter_sources[_NUM_GROUPS];
+    bool negative_source_in_fsr = false;
 
     /* Compute total (fission+scatter+fixed) source for group G */
-    FP_PRECISION* scatter_sources = _groupwise_scratch.at(tid);
-    FP_PRECISION* sigma_s = material->getSigmaS();
-    for (int G=0; G < _num_groups; G++) {
-      int first_idx = G * _num_groups;
-      for (int g=0; g < _num_groups; g++)
+    for (int G=0; G < _NUM_GROUPS; G++) {
+      int first_idx = G * _NUM_GROUPS;
+      fiss_mat = 0;
+      for (int g=0; g < _NUM_GROUPS; g++) {
+        if (material->isFissionable())
+          fiss_mat = material->getFissionMatrixByGroup(g+1,G+1);
         scatter_sources[g] = sigma_s[first_idx+g] * _scalar_flux(r,g);
+        fission_sources[g] = _scalar_flux(r,g) * fiss_mat;
+      }
       double scatter_source =
-          pairwise_sum<FP_PRECISION>(scatter_sources, _num_groups);
-
-      _reduced_sources(r,G) = fission_source * chi[G];
+          pairwise_sum<FP_PRECISION>(scatter_sources, _NUM_GROUPS);
+      double fission_source = pairwise_sum<FP_PRECISION>(fission_sources,
+                                                  _NUM_GROUPS);
+      fission_source /= _k_eff;
+      _reduced_sources(r,G) = fission_source;
       _reduced_sources(r,G) += scatter_source;
       if (_fixed_sources_on)
         _reduced_sources(r,G) += _fixed_sources(r,G);
@@ -1581,21 +1856,29 @@ void CPUSolver::computeFSRSources(int iteration) {
 
       /* Correct negative sources to (near) zero */
       if (_reduced_sources(r,G) < 0.0) {
-#pragma omp atomic
+#pragma omp atomic update
         num_negative_sources++;
-        if (iteration < 300 && !_negative_fluxes_allowed)
-          _reduced_sources(r,G) = 1.0e-20;
+        negative_source_in_fsr = true;
+        if (iteration < 30 && !_negative_fluxes_allowed)
+          _reduced_sources(r,G) = FLUX_EPSILON;
       }
     }
+
+    if (negative_source_in_fsr)
+#pragma omp atomic update
+      num_negative_fsrs++;
   }
 
   /* Tally the total number of negative source across the entire problem */
   long total_num_negative_sources = num_negative_sources;
+  long total_num_negative_fsrs = num_negative_fsrs;
   int num_negative_source_domains = (num_negative_sources > 0);
   int total_num_negative_source_domains = num_negative_source_domains;
 #ifdef MPIx
   if (_geometry->isDomainDecomposed()) {
     MPI_Allreduce(&num_negative_sources, &total_num_negative_sources, 1,
+                  MPI_LONG, MPI_SUM, _geometry->getMPICart());
+    MPI_Allreduce(&num_negative_fsrs, &total_num_negative_fsrs, 1,
                   MPI_LONG, MPI_SUM, _geometry->getMPICart());
     MPI_Allreduce(&num_negative_source_domains,
                   &total_num_negative_source_domains, 1,
@@ -1606,12 +1889,17 @@ void CPUSolver::computeFSRSources(int iteration) {
   /* Report negative sources */
   if (total_num_negative_sources > 0 && !_negative_fluxes_allowed) {
     if (_geometry->isRootDomain()) {
-      log_printf(WARNING, "Computed %ld negative sources on %d domains",
-                 total_num_negative_sources,
-                 total_num_negative_source_domains);
-      if (iteration < 300)
+      log_printf(WARNING, "Computed %ld negative sources in %ld fsrs on %d "
+                 "domains", total_num_negative_sources,
+                 total_num_negative_fsrs, total_num_negative_source_domains);
+      if (iteration < 30)
         log_printf(WARNING, "Negative sources corrected to zero");
     }
+
+    /* Output negative sources for debugging */
+    if (get_log_level() == DEBUG && _cmfd != NULL)
+      printNegativeSources(_num_iterations, _cmfd->getNumX(), _cmfd->getNumY(),
+                           _cmfd->getNumZ());
   }
 }
 
@@ -1628,7 +1916,7 @@ void CPUSolver::computeFSRFissionSources() {
     FP_PRECISION* sigma_t;
     FP_PRECISION fiss_mat;
     FP_PRECISION fission_source;
-    FP_PRECISION fission_sources[_num_groups];
+    FP_PRECISION fission_sources[_NUM_GROUPS];
 
     /* Compute the total source for each FSR */
 #pragma omp for schedule(guided)
@@ -1638,14 +1926,16 @@ void CPUSolver::computeFSRFissionSources() {
 
       /* Compute fission source for group g */
       //NOTE use full fission matrix instead of chi because of transpose
-      for (int g=0; g < _num_groups; g++) {
-        for (int g_prime=0; g_prime < _num_groups; g_prime++) {
-          fiss_mat = material->getFissionMatrixByGroup(g_prime+1,g+1);
+      for (int g=0; g < _NUM_GROUPS; g++) {
+        fiss_mat = 0;
+        for (int g_prime=0; g_prime < _NUM_GROUPS; g_prime++) {
+          if (material->isFissionable())
+            fiss_mat = material->getFissionMatrixByGroup(g_prime+1,g+1);
           fission_sources[g_prime] = fiss_mat * _scalar_flux(r,g_prime);
         }
 
         fission_source = pairwise_sum<FP_PRECISION>(fission_sources,
-                                                    _num_groups);
+                                                    _NUM_GROUPS);
 
         /* Compute total (fission) reduced source */
         _reduced_sources(r,g) = fission_source;
@@ -1668,7 +1958,7 @@ void CPUSolver::computeFSRScatterSources() {
     FP_PRECISION* sigma_t;
     FP_PRECISION sigma_s;
     FP_PRECISION scatter_source;
-    FP_PRECISION scatter_sources[_num_groups];
+    FP_PRECISION scatter_sources[_NUM_GROUPS];
 
     /* Compute the total source for each FSR */
 #pragma omp for schedule(guided)
@@ -1677,14 +1967,14 @@ void CPUSolver::computeFSRScatterSources() {
       material = _FSR_materials[r];
 
       /* Compute scatter source for group g */
-      for (int g=0; g < _num_groups; g++) {
-        for (int g_prime=0; g_prime < _num_groups; g_prime++) {
+      for (int g=0; g < _NUM_GROUPS; g++) {
+        for (int g_prime=0; g_prime < _NUM_GROUPS; g_prime++) {
           sigma_s = material->getSigmaSByGroup(g_prime+1,g+1);
           scatter_sources[g_prime] = sigma_s * _scalar_flux(r,g_prime);
         }
 
         scatter_source = pairwise_sum<FP_PRECISION>(scatter_sources,
-                                                    _num_groups);
+                                                    _NUM_GROUPS);
 
         /* Compute total (scatter) reduced source */
         _reduced_sources(r,g) = scatter_source;
@@ -1718,7 +2008,7 @@ double CPUSolver::computeResidual(residualType res_type) {
 
 #pragma omp parallel for schedule(static)
     for (long r=0; r < _num_FSRs; r++) {
-      for (int e=0; e < _num_groups; e++)
+      for (int e=0; e < _NUM_GROUPS; e++)
         if (reference_flux(r,e) > 0.) {
           residuals[r] += pow((_scalar_flux(r,e) - reference_flux(r,e)) /
                               reference_flux(r,e), 2);
@@ -1744,7 +2034,7 @@ double CPUSolver::computeResidual(residualType res_type) {
       if (material->isFissionable()) {
         nu_sigma_f = material->getNuSigmaF();
 
-        for (int e=0; e < _num_groups; e++) {
+        for (int e=0; e < _NUM_GROUPS; e++) {
           new_fission_source += _scalar_flux(r,e) * nu_sigma_f[e];
           old_fission_source += reference_flux(r,e) * nu_sigma_f[e];
         }
@@ -1775,7 +2065,7 @@ double CPUSolver::computeResidual(residualType res_type) {
       if (material->isFissionable()) {
         nu_sigma_f = material->getNuSigmaF();
 
-        for (int e=0; e < _num_groups; e++) {
+        for (int e=0; e < _NUM_GROUPS; e++) {
           new_total_source += _scalar_flux(r,e) * nu_sigma_f[e];
           old_total_source += reference_flux(r,e) * nu_sigma_f[e];
         }
@@ -1786,9 +2076,9 @@ double CPUSolver::computeResidual(residualType res_type) {
 
       /* Compute total scattering source for group G */
       FP_PRECISION* sigma_s = material->getSigmaS();
-      for (int G=0; G < _num_groups; G++) {
-        int first_idx = G * _num_groups;
-        for (int g=0; g < _num_groups; g++) {
+      for (int G=0; G < _NUM_GROUPS; G++) {
+        int first_idx = G * _NUM_GROUPS;
+        for (int g=0; g < _NUM_GROUPS; g++) {
           new_total_source += sigma_s[first_idx+g] * _scalar_flux(r,g);
           old_total_source += sigma_s[first_idx+g] * reference_flux(r,g);
         }
@@ -1828,7 +2118,7 @@ double CPUSolver::computeResidual(residualType res_type) {
 
   /* Error check residual componenets */
   if (residual < 0.0) {
-    log_printf(WARNING, "MOC residual mean square error %6.4f less than zero", 
+    log_printf(WARNING, "MOC residual mean square error %6.4f less than zero",
                residual);
     residual = 0.0;
   }
@@ -1872,10 +2162,10 @@ void CPUSolver::computeKeff() {
       else
         sigma = material->getSigmaA();
 
-      for (int e=0; e < _num_groups; e++)
+      for (int e=0; e < _NUM_GROUPS; e++)
         group_rates[e] = sigma[e] * _scalar_flux(r,e);
 
-      FSR_rates[r] = pairwise_sum<FP_PRECISION>(group_rates, _num_groups);
+      FSR_rates[r] = pairwise_sum<FP_PRECISION>(group_rates, _NUM_GROUPS);
       FSR_rates[r] *= volume;
     }
 
@@ -1891,7 +2181,7 @@ void CPUSolver::computeKeff() {
 
   /* Get the total number of source regions */
   long total_num_FSRs = _num_FSRs;
-  
+
 #ifdef MPIx
   /* Reduce rates across domians */
   if (_geometry->isDomainDecomposed()) {
@@ -1903,7 +2193,7 @@ void CPUSolver::computeKeff() {
     double local_rates[num_rates];
     for (int i=0; i < num_rates; i++)
       local_rates[i] = rates[i];
- 
+
      /* Reduce computed rates */
     MPI_Allreduce(local_rates, rates, num_rates, MPI_DOUBLE, MPI_SUM, comm);
 
@@ -1937,8 +2227,10 @@ void CPUSolver::transportSweep() {
   /* Initialize flux in each FSR to zero */
   flattenFSRFluxes(0.0);
 
+#ifndef ONLYVACUUMBC
   /* Copy starting flux to current flux */
   copyBoundaryFluxes();
+#endif
 
   /* Tally the starting fluxes to boundaries */
   if (_cmfd != NULL)
@@ -1971,6 +2263,10 @@ void CPUSolver::transportSweep() {
   if (_track_generator->getGeometry()->isDomainDecomposed())
     transferAllInterfaceFluxes();
 #endif
+
+#ifdef ONLYVACUUMBC
+  resetBoundaryFluxes();
+#endif
 }
 
 
@@ -1993,7 +2289,6 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, long next_fsr_id,
   long fsr_id = curr_segment->_region_id;
   FP_PRECISION length = curr_segment->_length;
   FP_PRECISION* sigma_t = curr_segment->_material->getSigmaT();
-  ExpEvaluator* exp_evaluator = _exp_evaluators[azim_index][polar_index];
 
   /* Obtain discontinuity factor (default to array of ones) */
   std::vector<FP_PRECISION> df = _df[0];
@@ -2007,18 +2302,47 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, long next_fsr_id,
 
   if (_SOLVE_3D) {
 
-    FP_PRECISION length_2D = exp_evaluator->convertDistance3Dto2D(length);
+    // The for loop is cut in chunks of size VEC_LENGTH (strip-mining) to ease
+    // vectorization of the loop by the compiler
+    // Determine number of SIMD vector groups
+    const int num_vector_groups = _NUM_GROUPS / VEC_LENGTH;
+
+    for (int v=0; v < num_vector_groups; v++) {
+      int start_vector = v * VEC_LENGTH;
 
 #pragma omp simd aligned(sigma_t, fsr_flux)
-    for (int e=0; e < _num_groups; e++) {
+      for (int e=start_vector; e < start_vector + VEC_LENGTH; e++) {
 
-      FP_PRECISION tau = sigma_t[e] * length_2D;
+        FP_PRECISION tau = sigma_t[e] * length;
+
+        /* Compute the exponential */
+        FP_PRECISION exponential;
+        expF1_fractional(tau, &exponential);
+
+        /* Compute attenuation and tally the contribution to the scalar flux */
+        FP_PRECISION delta_psi = (tau * track_flux[e] - length *
+                _reduced_sources(fsr_id, e)) * exponential;
+
+        /* Apply discontinuity factor */
+        delta_psi *= df[e];
+        delta_psi -= (df[e] - 1) * track_flux[e];
+
+        track_flux[e] -= delta_psi;
+        fsr_flux[e] += delta_psi;
+      }
+    }
+
+    // The rest of the loop is treated separately
+#pragma omp simd aligned(sigma_t, fsr_flux)
+    for (int e=num_vector_groups * VEC_LENGTH; e < _NUM_GROUPS; e++) {
+      FP_PRECISION tau = sigma_t[e] * length;
 
       /* Compute the exponential */
-      FP_PRECISION exponential = exp_evaluator->computeExponential(tau, 0);
+      FP_PRECISION exponential;
+      expF1_fractional(tau, &exponential);
 
       /* Compute attenuation and tally the contribution to the scalar flux */
-      FP_PRECISION delta_psi = (tau * track_flux[e] - length_2D *
+      FP_PRECISION delta_psi = (tau * track_flux[e] - length *
               _reduced_sources(fsr_id, e)) * exponential;
 
       /* Apply discontinuity factor */
@@ -2026,44 +2350,44 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, long next_fsr_id,
       delta_psi -= (df[e] - 1) * track_flux[e];
 
       track_flux[e] -= delta_psi;
-      fsr_flux[e] += delta_psi * _quad->getWeightInline(azim_index,
-                                                        polar_index);
+      fsr_flux[e] += delta_psi;
     }
   }
   else {
-
+//FIXME: Implement strip mining for the 2D flat source solver
+    ExpEvaluator* exp_evaluator = _exp_evaluators[azim_index][polar_index];
     const int num_polar_2 = _num_polar / 2;
 
     /* Compute tau in advance to simplify attenuation loop */
-    FP_PRECISION tau[_num_groups * num_polar_2] 
+    FP_PRECISION tau[_NUM_GROUPS * num_polar_2]
                  __attribute__ ((aligned(VEC_ALIGNMENT)));
 
 #pragma omp simd aligned(tau)
-    for (int pe=0; pe < num_polar_2 * _num_groups; pe++)
-      tau[pe] = sigma_t[pe % _num_groups] * length;
+    for (int pe=0; pe < num_polar_2 * _NUM_GROUPS; pe++)
+      tau[pe] = sigma_t[pe % _NUM_GROUPS] * length;
 
-    FP_PRECISION delta_psi[_num_groups * num_polar_2] 
+    FP_PRECISION delta_psi[_NUM_GROUPS * num_polar_2]
                  __attribute__ ((aligned(VEC_ALIGNMENT)));
 
     /* Loop over polar angles and energy groups */
 #pragma omp simd aligned(tau, delta_psi)
-    for (int pe=0; pe < num_polar_2 * _num_groups; pe++) {
+    for (int pe=0; pe < num_polar_2 * _NUM_GROUPS; pe++) {
 
       FP_PRECISION wgt = _quad->getWeightInline(azim_index,
-                                                int(pe/_num_groups));
+                                                int(pe/_NUM_GROUPS));
 
       /* Compute the exponential */
       FP_PRECISION exponential = exp_evaluator->computeExponential(tau[pe],
-                                                int(pe/_num_groups));
+                                                int(pe/_NUM_GROUPS));
 
       /* Compute attenuation of the track angular flux */
       delta_psi[pe] = (tau[pe] * track_flux[pe] - length *
-                      _reduced_sources(fsr_id, pe%_num_groups)) * exponential;
+                      _reduced_sources(fsr_id, pe%_NUM_GROUPS)) * exponential;
 
       /* Apply discontinuity factor */
       if (_use_DF > 0 and df_index >= 0 and _num_iterations >= _start_DF) {
-        int p = pe / _num_groups;
-        int e = pe % _num_groups;
+        int p = pe / _NUM_GROUPS;
+        int e = pe % _NUM_GROUPS;
         df = _df[df_index + p];
 
         delta_psi[pe] *= df[e];
@@ -2078,8 +2402,8 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, long next_fsr_id,
     //TODO Change loop to accept 'pe' indexing, and keep vectorized
     for (int p=0; p < num_polar_2; p++) {
 #pragma omp simd aligned(fsr_flux)
-      for (int e=0; e < _num_groups; e++)
-        fsr_flux[e] += delta_psi[p*_num_groups + e];
+      for (int e=0; e < _NUM_GROUPS; e++)
+        fsr_flux[e] += delta_psi[p*_NUM_GROUPS + e];
     }
 
     if (_use_DF >= 2 and df_index >= 0 and _num_iterations >= _start_DF) {
@@ -2100,23 +2424,29 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, long next_fsr_id,
  * @brief Move the segment(s)' contributions to the scalar flux from the buffer
  * to the global scalar flux array.
  * @param fsr_id the id of the fsr
+ * @param weight the quadrature weight (only for 3D ray tracing)
  * @param fsr_flux the buffer containing the segment(s)' contribution
  */
 void CPUSolver::accumulateScalarFluxContribution(long fsr_id,
-                                         FP_PRECISION* __restrict__ fsr_flux) {
+                                                 FP_PRECISION weight,
+                                                 FP_PRECISION* __restrict__
+                                                 fsr_flux) {
 
   // Atomically increment the FSR scalar flux from the temporary array
   omp_set_lock(&_FSR_locks[fsr_id]);
 
   // Add to global scalar flux vector
 #pragma omp simd aligned(fsr_flux)
-  for (int e=0; e < _num_groups; e++)
-    _scalar_flux(fsr_id,e) += fsr_flux[e];
+  for (int e=0; e < _NUM_GROUPS; e++)
+    _scalar_flux(fsr_id,e) += weight * fsr_flux[e];
 
   omp_unset_lock(&_FSR_locks[fsr_id]);
+#ifdef INTEL
+#pragma omp flush
+#endif
 
   /* Reset buffers */
-  memset(fsr_flux, 0, _num_groups * sizeof(FP_PRECISION));
+  memset(fsr_flux, 0, _NUM_GROUPS * sizeof(FP_PRECISION));
 }
 
 
@@ -2211,12 +2541,18 @@ void CPUSolver::addSourceToScalarFlux() {
     volume = _FSR_volumes[r];
     sigma_t = _FSR_materials[r]->getSigmaT();
 
-    for (int e=0; e < _num_groups; e++) {
+    /* Handle zero volume source region case */
+    if (volume < FLT_EPSILON)
+      volume = 1e30;
+
+    for (int e=0; e < _NUM_GROUPS; e++) {
+
       _scalar_flux(r, e) /= (sigma_t[e] * volume);
       _scalar_flux(r, e) += FOUR_PI * _reduced_sources(r, e) / sigma_t[e];
 
       if (_scalar_flux(r, e) < 0.0 && !_negative_fluxes_allowed) {
-        _scalar_flux(r, e) = 1e-20;
+        _scalar_flux(r, e) = FLUX_EPSILON;
+
 #pragma omp atomic update
         num_negative_fluxes++;
       }
@@ -2241,11 +2577,9 @@ void CPUSolver::addSourceToScalarFlux() {
   if (total_num_negative_fluxes > 0  && !_negative_fluxes_allowed) {
     if (_geometry->isRootDomain()) {
       log_printf(WARNING, "Computed %ld negative fluxes on %d domains",
-                 total_num_negative_fluxes,
-                 total_num_negative_flux_domains);
+                 total_num_negative_fluxes, total_num_negative_flux_domains);
     }
   }
-
 }
 
 
@@ -2266,15 +2600,15 @@ void CPUSolver::computeStabilizingFlux() {
       /* Extract total cross-sections */
       FP_PRECISION* sigma_t = _FSR_materials[r]->getSigmaT();
 
-      for (int e=0; e < _num_groups; e++) {
+      for (int e=0; e < _NUM_GROUPS; e++) {
 
         /* Extract the in-scattering (diagonal) element */
-        FP_PRECISION sigma_s = scattering_matrix[e*_num_groups+e];
+        FP_PRECISION sigma_s = scattering_matrix[e*_NUM_GROUPS+e];
 
-        /* For negative cross-sections, add the absolute value of the 
+        /* For negative cross-sections, add the absolute value of the
            in-scattering rate to the stabilizing flux */
         if (sigma_s < 0.0)
-          _stabilizing_flux(r, e) = -_scalar_flux(r,e) * _stabilization_factor 
+          _stabilizing_flux(r, e) = -_scalar_flux(r,e) * _stabilization_factor
               * sigma_s / sigma_t[e];
       }
     }
@@ -2283,7 +2617,7 @@ void CPUSolver::computeStabilizingFlux() {
 
     /* Treat each group */
 #pragma omp parallel for schedule(static)
-    for (int e=0; e < _num_groups; e++) {
+    for (int e=0; e < _NUM_GROUPS; e++) {
 
       /* Look for largest absolute scattering ratio */
       FP_PRECISION max_ratio = 0.0;
@@ -2311,10 +2645,10 @@ void CPUSolver::computeStabilizingFlux() {
     /* Get the multiplicative factor */
     FP_PRECISION mult_factor = 1.0 / _stabilization_factor - 1.0;
 
-    /* Apply the global muliplicative factor */ 
+    /* Apply the global muliplicative factor */
 #pragma omp parallel for schedule(static)
     for (long r=0; r < _num_FSRs; r++)
-      for (int e=0; e < _num_groups; e++)
+      for (int e=0; e < _NUM_GROUPS; e++)
         _stabilizing_flux(r, e) = mult_factor * _scalar_flux(r,e);
   }
 }
@@ -2337,17 +2671,17 @@ void CPUSolver::stabilizeFlux() {
       /* Extract total cross-sections */
       FP_PRECISION* sigma_t = _FSR_materials[r]->getSigmaT();
 
-      for (int e=0; e < _num_groups; e++) {
+      for (int e=0; e < _NUM_GROUPS; e++) {
 
         /* Extract the in-scattering (diagonal) element */
-        FP_PRECISION sigma_s = scattering_matrix[e*_num_groups+e];
+        FP_PRECISION sigma_s = scattering_matrix[e*_NUM_GROUPS+e];
 
         /* For negative cross-sections, add the stabilizing flux
            and divide by the diagonal matrix element used to form it so that
            no bias is introduced but the source iteration is stabilized */
         if (sigma_s < 0.0) {
           _scalar_flux(r, e) += _stabilizing_flux(r,e);
-          _scalar_flux(r, e) /= (1.0 - _stabilization_factor * sigma_s / 
+          _scalar_flux(r, e) /= (1.0 - _stabilization_factor * sigma_s /
                                  sigma_t[e]);
         }
       }
@@ -2357,7 +2691,7 @@ void CPUSolver::stabilizeFlux() {
 
     /* Treat each group */
 #pragma omp parallel for schedule(static)
-    for (int e=0; e < _num_groups; e++) {
+    for (int e=0; e < _NUM_GROUPS; e++) {
 
       /* Look for largest absolute scattering ratio */
       FP_PRECISION max_ratio = 0.0;
@@ -2386,7 +2720,7 @@ void CPUSolver::stabilizeFlux() {
     /* Apply the damping factor */
 #pragma omp parallel for schedule(static)
     for (long r=0; r < _num_FSRs; r++) {
-      for (int e=0; e < _num_groups; e++) {
+      for (int e=0; e < _NUM_GROUPS; e++) {
         _scalar_flux(r, e) += _stabilizing_flux(r, e);
         _scalar_flux(r, e) *= _stabilization_factor;
       }
@@ -2433,13 +2767,13 @@ void CPUSolver::computeFSRFissionRates(double* fission_rates, long num_FSRs,
   for (long r=0; r < _num_FSRs; r++) {
     if (nu) {
       sigma_f = _FSR_materials[r]->getNuSigmaF();
-    } 
+    }
     else {
       sigma_f = _FSR_materials[r]->getSigmaF();
     }
     vol = _FSR_volumes[r];
 
-    for (int e=0; e < _num_groups; e++)
+    for (int e=0; e < _NUM_GROUPS; e++)
       fission_rates[r] += sigma_f[e] * _scalar_flux(r,e) * vol;
   }
 
@@ -2489,6 +2823,55 @@ void CPUSolver::printInputParamsSummary() {
 }
 
 
+#ifdef MPIx
+/**
+ * @brief A function that prints the repartition of integrations and tracks
+ *        among domains and interfaces.
+ */
+void CPUSolver::printLoadBalancingReport() {
+
+  /* Give a measure of the load imbalance for the sweep step (segments) */
+  int num_ranks = 1;
+  long num_segments = _track_generator->getNumSegments();
+  long min_segments = num_segments, max_segments = num_segments,
+       total_segments = num_segments;
+  if (_geometry->isDomainDecomposed()) {
+    MPI_Comm_size(_geometry->getMPICart(), &num_ranks);
+    MPI_Reduce(&num_segments, &min_segments, 1, MPI_LONG, MPI_MIN, 0,
+               _geometry->getMPICart());
+    MPI_Reduce(&num_segments, &max_segments, 1, MPI_LONG, MPI_MAX, 0,
+               _geometry->getMPICart());
+    MPI_Reduce(&num_segments, &total_segments, 1, MPI_LONG, MPI_SUM, 0,
+               _geometry->getMPICart());
+  }
+  FP_PRECISION mean_segments = float(total_segments) / num_ranks;
+  log_printf(INFO_ONCE, "Min / max / mean number of segments in domains: "
+             "%.1e / %.1e / %.1e", float(min_segments), float(max_segments),
+             mean_segments);
+
+  /* Give a measure of load imbalance for the communication phase */
+  FP_PRECISION tracks_x = 0, tracks_y = 0, tracks_z = 0;
+  int domain = _geometry->getNeighborDomain(0, 0, 1);
+  if (domain != -1)
+    tracks_z = _boundary_tracks.at(_neighbor_connections.at(domain)).size();
+
+  domain = _geometry->getNeighborDomain(0, 1, 0);
+  if (domain != -1)
+    tracks_y = _boundary_tracks.at(_neighbor_connections.at(domain)).size();
+
+  domain = _geometry->getNeighborDomain(1, 0, 0);
+  if (domain != -1)
+    tracks_x = _boundary_tracks.at(_neighbor_connections.at(domain)).size();
+
+  long sum_border_tracks_200 = std::max(FP_PRECISION(1),
+                                        tracks_x + tracks_y + tracks_z) / 100.;
+  log_printf(INFO_ONCE, "Percentage of tracks exchanged in X/Y/Z direction: "
+             "%.2f / %.2f / %.2f %", tracks_x / sum_border_tracks_200, tracks_y
+             / sum_border_tracks_200, tracks_z / sum_border_tracks_200);
+}
+#endif
+
+
 /**
  * @brief A function that prints the source region fluxes on a 2D mesh grid
  * @param dim1 coordinates of the mesh grid in the first direction
@@ -2536,7 +2919,7 @@ void CPUSolver::printFSRFluxes(std::vector<double> dim1,
     for (int i=0; i < fsr_ids.size(); i++)
       num_contains_coords[i] = domain_contains_coords[i];
 
-  for (int e=0; e < _num_groups; e++) {
+  for (int e=0; e < _NUM_GROUPS; e++) {
 
     std::vector<FP_PRECISION> domain_fluxes(fsr_ids.size(), 0);
     std::vector<FP_PRECISION> total_fluxes(fsr_ids.size());
@@ -2561,7 +2944,7 @@ void CPUSolver::printFSRFluxes(std::vector<double> dim1,
         for (int j=0; j<dim2.size(); j++) {
           int r = i + j*dim1.size();
           double flux = total_fluxes.at(r) / num_contains_coords.at(r);
-          log_printf(NORMAL, "(%d: %f, %d: %f) -> %f", i, dim1.at(i), j, 
+          log_printf(NORMAL, "(%d: %f, %d: %f) -> %f", i, dim1.at(i), j,
                      dim2.at(j), flux);
         }
       }
@@ -2603,13 +2986,13 @@ void CPUSolver::printFluxesTemp() {
 
 
 /**
- * @brief A function that prints the number of FSRs with negative sources in 
+ * @brief A function that prints the number of FSRs with negative sources in
  *        the whole geometry subdivided by a 3D lattice. The number of negative
  *        sources per energy group is also printed out.
  * @param iteration the current iteration
  * @param num_x number of divisions in X direction
  * @param num_y number of divisions in Y direction
- * @param num_z number of divisions in Z direction 
+ * @param num_z number of divisions in Z direction
  */
 void CPUSolver::printNegativeSources(int iteration, int num_x, int num_y,
                                      int num_z) {
@@ -2642,10 +3025,11 @@ void CPUSolver::printNegativeSources(int iteration, int num_x, int num_y,
   /* Create the Mesh lattice */
   lattice.setWidth(width_x, width_y, width_z);
   lattice.setOffset(offset_x, offset_y, offset_z);
+  lattice.computeSizes();
 
   /* Create a group-wise negative source mapping */
-  int by_group[_num_groups];
-  for (int e=0; e < _num_groups; e++)
+  int by_group[_NUM_GROUPS];
+  for (int e=0; e < _NUM_GROUPS; e++)
     by_group[e] = 0;
 
   int mapping[num_x*num_y*num_z];
@@ -2660,8 +3044,8 @@ void CPUSolver::printNegativeSources(int iteration, int num_x, int num_y,
     int lat_cell = lattice.getLatticeCell(pt);
 
     /* Determine the number of negative sources */
-    for (int e=0; e < _num_groups; e++) {
-      if (_reduced_sources(r,e) < 0.0) {
+    for (int e=0; e < _NUM_GROUPS; e++) {
+      if (_reduced_sources(r,e) < 10 * FLUX_EPSILON) {
         by_group[e]++;
         mapping[lat_cell]++;
       }
@@ -2679,9 +3063,9 @@ void CPUSolver::printNegativeSources(int iteration, int num_x, int num_y,
                   _geometry->getMPICart());
 
     int neg_src_grp_send[size];
-    for (int e=0; e < _num_groups; e++)
+    for (int e=0; e < _NUM_GROUPS; e++)
         neg_src_grp_send[e] = by_group[e];
-    MPI_Allreduce(neg_src_grp_send, by_group, _num_groups, MPI_INT, MPI_SUM,
+    MPI_Allreduce(neg_src_grp_send, by_group, _NUM_GROUPS, MPI_INT, MPI_SUM,
                   _geometry->getMPICart());
   }
 #endif
@@ -2691,7 +3075,7 @@ void CPUSolver::printNegativeSources(int iteration, int num_x, int num_y,
   if (_geometry->isRootDomain()) {
     out << "[NORMAL]  Group-wise distribution of negative sources:"
         << std::endl;
-    for (int e=0; e < _num_groups; e++)
+    for (int e=0; e < _NUM_GROUPS; e++)
       out << "[NORMAL]  Group "  << e << ": " << by_group[e] << std::endl;
     out << "[NORMAL]  Spatial distribution of negative sources:" << std::endl;
     for (int z=0; z < num_z; z++) {

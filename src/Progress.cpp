@@ -4,7 +4,7 @@
 /**
  * @brief Constructor for Progress.
  */
-Progress::Progress(int num_iterations, std::string name, double interval,
+Progress::Progress(long num_iterations, std::string name, double interval,
                    Geometry* geometry, bool mpi_comm) {
 
   if (geometry != NULL) {
@@ -24,7 +24,7 @@ Progress::Progress(int num_iterations, std::string name, double interval,
    * each interval value in _intervals */
   int num_intervals = 1. / interval + 1;
   _intervals.resize(num_intervals);
-  int interval_stride = interval * num_iterations;
+  long interval_stride = interval * num_iterations;
   if (interval_stride == 0)
     interval_stride = 1;
   for (int i=0; i < num_intervals; i++)
@@ -45,19 +45,22 @@ Progress::~Progress() {
  */
 void Progress::incrementCounter() {
 
-  int curr_count;
-  bool found_interval = false;
+  long curr_count;
 
-  /* Increment counter, check if next interval is reached */
   #pragma omp critical
   {
+    /* Increment counter */
     curr_count = _counter++;
+
+    /* While loop handles the case of an empty interval */
     while (_curr_interval < _intervals.size()) {
+
+      /* Check if next interval is reached */
       if (curr_count != _intervals.at(_curr_interval))
         break;
-      int count = curr_count;
-      if (count != 0)
-        count += 1;
+
+      /* Add 1 for nicer printout */
+      long count = curr_count + (count != 0);
       double num_iters = _num_iterations;
       double percent = count / num_iters * 100.0;
 #ifdef MPIx

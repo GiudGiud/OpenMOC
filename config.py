@@ -59,6 +59,9 @@ class configuration:
     # Default floating point for the main openmoc module is single precision
     fp = 'single'
 
+    # The number of energy groups to compile for is by default not specified
+    num_groups = None
+
     # Compile using ccache (for developers needing fast recompilation)
     with_ccache = False
 
@@ -83,7 +86,7 @@ class configuration:
     # that the number of energy groups is be fit too a multiple of this
     # vector_length, and restructuring the innermost loops in the solver to
     # loop from 0 to the vector length
-    vector_length = 8
+    vector_length = 32
 
     # The vector alignment used in the VectorizedSolver class when allocating
     # aligned data structures using MM_MALLOC and MM_FREE
@@ -104,7 +107,7 @@ class configuration:
     # Dictionary of source code files to compile for each extension module
     sources = dict()
 
-    sources['gcc'] = ['openmoc/openmoc_wrap.cpp',
+    sources['gcc'] = ['openmoc/swig/openmoc_wrap.cpp',
                       'src/Cell.cpp',
                       'src/Cmfd.cpp',
                       'src/CPUSolver.cpp',
@@ -141,14 +144,13 @@ class configuration:
     sources['mpicc'] = sources['gcc']
 
 
-    sources['icpc'] = sources['gcc'] + ['src/VectorizedSolver.cpp']
+    sources['icpc'] = sources['gcc']
 
 
     sources['bgxlc'] = sources['gcc']
 
 
     sources['nvcc'] = ['openmoc/cuda/openmoc_cuda_wrap.cpp',
-                       'src/accel/cuda/GPUExpEvaluator.cu',
                        'src/accel/cuda/GPUQuery.cu',
                        'src/accel/cuda/clone.cu',
                        'src/accel/cuda/GPUSolver.cu']
@@ -171,17 +173,14 @@ class configuration:
                                '-Wno-deprecated-register',
                                '-Wno-parentheses-equality',
                                '-march=native']
-    compiler_flags['icpc'] =['-c', '-O3', '-fast', '--ccache-skip',
-                             '-openmp', '-xhost', '-std=c++11',
-                             '--ccache-skip', '-fpic',
-                             '-openmp-report', '-vec-report']
+    compiler_flags['icpc'] =['-c', '-O3', '-fast','-qopenmp', '-xhost',
+                             '-std=c++11','-fpic',]
     compiler_flags['bgxlc'] = ['-c', '-O2', '-qarch=qp', '-qreport',
                                '-qsimd=auto', '-qtune=qp', '-qunroll=auto',
                                '-qsmp=omp', '-qpic']
     compiler_flags['nvcc'] =  ['--relocatable-device-code', 'true',
                                '-c', '-O3',  '-std=c++11',
-                               '--compiler-options', '-fpic',
-                               '-arch=compute_20']
+                               '--compiler-options', '-fpic', '--use_fast_math']
 
 
     ###########################################################################
@@ -208,7 +207,7 @@ class configuration:
                                  '-Wl,-soname,' + get_openmoc_object_name()]
 
 
-    linker_flags['icpc'] = [ '-openmp', '-shared',
+    linker_flags['icpc'] = [ '-qopenmp', '-shared',
                              '-Xlinker', '-soname=' + get_openmoc_object_name()]
     linker_flags['bgxlc'] = ['-qmkshrobj', '-shared',
                              '-R/soft/compilers/ibmcmp-may2013/lib64/bg/bglib64',
@@ -341,7 +340,6 @@ class configuration:
             macros[compiler][precision].append(('VEC_ALIGNMENT',
                                                 vector_alignment))
 
-
     # set extra flag for determining precision
     for compiler in macros:
         for precision in macros[compiler]:
@@ -370,12 +368,22 @@ class configuration:
         Python package based on the user-defined flags defined at compile time.
         """
 
+        # If user wishes to specify number of groups at compile time
+        if self.num_groups:
+            for k in self.compiler_flags:
+                self.compiler_flags[k].append('-DNGROUPS=' +
+                                              str(self.num_groups))
+
         # If the user wishes to compile using debug mode, append the debugging
         # flag to all lists of compiler flags for all distribution types
         if self.debug_mode:
             for k in self.compiler_flags:
                 self.compiler_flags[k].append('-g')
-                self.compiler_flags[k].append('-fno-omit-frame-pointer')
+
+                # As of September 2019, nvcc does not support this flag:
+                if k != 'nvcc':
+                    self.compiler_flags[k].append('-fno-omit-frame-pointer')
+
                 ind = [i for i, item in enumerate(self.compiler_flags[k]) \
                        if item.startswith('-O')]
                 self.compiler_flags[k][ind[0]] = '-O0'

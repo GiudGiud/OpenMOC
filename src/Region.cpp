@@ -49,17 +49,19 @@ void Region::removeHalfspace(Surface* surface, int halfspace) {
     std::vector<Region*>::iterator iter1;
 
     /* Loop through nodes in region to check for the same Halfspace */
-    for (iter1 = _nodes.begin(); iter1 != _nodes.end(); iter1++) {
+    for ( ; iter1 != _nodes.end();) {
 
         if (dynamic_cast<Halfspace*>(*iter1)) {
           Halfspace* iter2 = dynamic_cast<Halfspace*>(*iter1);
           if (iter2->getSurface()->getId() == surface->getId() && 
               iter2->getHalfspace() == halfspace) {
 
-            delete iter2;
+            //delete iter2; FIXME Memory leak
             _nodes.erase(iter1);
         }
       }
+      else
+        ++iter1;
     }
   }
 }
@@ -576,6 +578,7 @@ boundaryType Region::getMaxZBoundaryType() {
  * @details If the trajectory will not intersect any of the Surfaces in the
  *          Region returns INFINITY.
  * @param coords a pointer to a localcoords
+ * @return distance to the region boundaries
  */
 double Region::minSurfaceDist(LocalCoords* coords) {
 
@@ -602,7 +605,12 @@ double Region::minSurfaceDist(LocalCoords* coords) {
  *        LocalCoords object.
  * @details If the trajectory will not intersect any of the Surfaces in the
  *          Region returns INFINITY.
- * @param coords a pointer to a localcoords
+ * @param point the Point of interest
+ * @param azim the azimuthal angle of the trajectory
+ *        (in radians from \f$[0,2\pi]\f$)
+ * @param polar the polar angle of the trajectory
+ *        (in radians from \f$[0,\pi]\f$)
+ * @return distance to nearest intersection with the region's boundaries
  */
 double Region::minSurfaceDist(Point* point, double azim, double polar) {
 

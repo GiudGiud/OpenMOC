@@ -54,34 +54,33 @@ struct dev_track {
   /** The number of segments making up this Track */
   int _num_segments;
 
-  /** Index of the Track which reflects out of this Track along its "forward"
-   * direction for reflective boundary conditions. */
-  int _track_in;
+  /** Index of the next Track when traveling along this Track in the "forward"
+   * direction. */
+  long _next_track_fwd;
 
-  /** Index of the Track which reflects out of this Track along its "reverse"
-   * direction for reflective boundary conditions. */
-  int _track_out;
+  /** Index of the next Track when traveling along this Track in the "reverse"
+   * direction. */
+  long _next_track_bwd;
 
-  /** The first index into the global 2D ragged array of Tracks for the Track
-   *  that reflects out of this Track along its "forward" direction for
-   *  reflective boundary conditions. */
-  bool _refl_in;
+  /** A boolean to indicate whether to give the flux to the "forward" (true)
+   *  or "backward" (false) direction of the next Track going in the "forward"
+   *  direction. */
+  bool _next_fwd_is_fwd;
 
-  /** A boolean to indicate whether to give the flux to the "forward"
-   *  (false) or "reverse" (true) direction of the Track reflecting out of
-   *  this one along its "forward" direction for reflective boundary
-   *  conditions. */
-  bool _refl_out;
-
-  /** A boolean to indicate whether the outgoing angular flux along this
-   *  Track's "forward" direction should be zeroed out for vacuum boundary
-   *  conditions. */
-  bool _bc_in;
+  /** A boolean to indicate whether to give the flux to the "forward" (true)
+   *  or "reverse" (false) direction of the next Track going in the "reverse"
+   *  direction. */
+  bool _next_bwd_is_fwd;
 
   /** A boolean to indicate whether the outgoing angular flux along this
-   *  Track's "reverse" direction should be zeroed out for vacuum boundary
-   *  conditions. */
-  bool _bc_out;
+   *  Track's "forward" direction should be transferred to the outgoing
+   *  Track. */
+  bool _transfer_flux_fwd;
+
+  /** A boolean to indicate whether the outgoing angular flux along this
+   *  Track's "reverse" direction should be transferred to the incoming
+   *  Track. */
+  bool _transfer_flux_bwd;
 };
 
 

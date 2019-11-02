@@ -40,9 +40,9 @@ void reset_cell_id() {
  * @brief Maximize the auto-generated unique Cell ID counter.
  * @details This method updates the auto-generated unique Cell ID
  *          counter if the input parameter is greater than the present
- *          value. This is useful for the OpenCG compatibility module
+ *          value. This is useful for the OpenMC compatibility module
  *          to ensure that the auto-generated Cell IDs do not
- *          collide with those created in OpenCG.
+ *          collide with those created in OpenMC.
  * @param cell_id the id assigned to the auto-generated counter
  */
 void maximize_cell_id(int cell_id) {
@@ -83,11 +83,11 @@ Cell::Cell(int id, const char* name) {
   _num_instances = 0;
 
   _rotated = false;
-  memset(&_rotation, 0., 3*sizeof(double));
-  memset(&_rotation_matrix, 0., 9*sizeof(double));
+  memset(&_rotation, 0, 3*sizeof(double));
+  memset(&_rotation_matrix, 0, 9*sizeof(double));
 
   _translated = false;
-  memset(&_translation, 0., 3*sizeof(double));
+  memset(&_translation, 0, 3*sizeof(double));
 
   _num_rings = 0;
   _num_sectors = 0;
@@ -292,7 +292,7 @@ double* Cell::getRotationMatrix() {
 /**
  * @brief Fills an array with the rotation angles for x, y and z.
  * @details This class method is intended to be called by the OpenMOC
- *          Python OpenCG compatiblity module. Although this method appears to
+ *          Python OpenMC compatiblity module. Although this method appears to
  *          require two arguments, in reality it only requires one due to SWIG
  *          and would be called from within Python as follows:
  *
@@ -300,7 +300,7 @@ double* Cell::getRotationMatrix() {
  *          rotation = cell.getRotation(3)
  * @endcode
  *
- * @param rotation an array of rotation angles of length 3 for x, y and z
+ * @param rotations an array of rotation angles of length 3 for x, y and z
  * @param num_axes the number of axes (this must always be 3)
  * @param units the angular units in "radians" or "degrees" (default)
  */
@@ -337,7 +337,7 @@ double* Cell::getTranslation() {
 /**
  * @brief Fills an array with the translations along x, y and z.
  * @details This class method is intended to be called by the OpenMOC
- *          Python OpenCG compatiblity module. Although this method appears to
+ *          Python OpenMC compatiblity module. Although this method appears to
  *          require two arguments, in reality it only requires one due to SWIG
  *          and would be called from within Python as follows:
  *
@@ -345,7 +345,7 @@ double* Cell::getTranslation() {
  *          translation = cell.retrieveTranslation(3)
  * @endcode
  *
- * @param translation an array of translations of length 3 for x, y and z
+ * @param translations an array of translations of length 3 for x, y and z
  * @param num_axes the number of axes (this must always be 3)
  */
 void Cell::retrieveTranslation(double* translations, int num_axes) {
@@ -668,7 +668,6 @@ boundaryType Cell::getMaxZBoundaryType() {
 
   return boundary;
 }
-
 
 
 /**
@@ -1002,8 +1001,9 @@ void Cell::setTranslation(double* translation, int num_axes) {
 /**
  * @brief Set the Cell's number of rings.
  * @param num_rings the number of rings in this Cell
+ * @param inner_radius add (0,0,r) ZCylinder to ringify around (default none)
  */
-void Cell::setNumRings(int num_rings) {
+void Cell::setNumRings(int num_rings, double inner_radius) {
   if (num_rings < 0)
     log_printf(ERROR, "Unable to give %d rings to Cell %d since this is "
                "a negative number", num_rings, _id);
@@ -1012,6 +1012,15 @@ void Cell::setNumRings(int num_rings) {
     _num_rings = 0;
   else
     _num_rings = num_rings;
+
+  if (inner_radius >= 0) {
+    // Create an inner Z cylinder at coordinate (0, 0)
+    ZCylinder* zcylinder = new ZCylinder(0, 0, inner_radius);
+    zcylinder->setName("innermost ring cylinder");
+
+    // The cell is defined as being outside this cylinder
+    addSurface(+1, zcylinder);
+  }
 }
 
 
@@ -1080,7 +1089,7 @@ void Cell::addSurface(int halfspace, Surface* surface) {
   * @param surface a pointer to the Surface
   */
  void Cell::addSurfaceInRegion(int halfspace, Surface* surface) {
- 
+
    /* Create a new halfspace */
    Halfspace* new_halfspace = new Halfspace(halfspace, surface);
 
@@ -1116,7 +1125,7 @@ void Cell::removeSurface(Surface* surface) {
   * @param region_type the logical operation
   */
  void Cell::addLogicalNode(int region_type) {
- 
+
    /* Create new region if void */
    if (_region == NULL) {
      if (region_type == INTERSECTION) {
@@ -1183,7 +1192,7 @@ void Cell::addNeighborCell(Cell* cell) {
  *          is within the Region. This point is only inside the Cell if it
  *          is on the same side of every Surface bounding the Cell.
  * @param point a pointer to a Point
- * @returns true if the Point is inside the Cell; otherwise false
+ * @return true if the Point is inside the Cell; otherwise false
  */
 bool Cell::containsPoint(Point* point) {
 
@@ -1214,6 +1223,7 @@ bool Cell::containsPoint(Point* point) {
  *          is on the same side of the Surface. This Point is only inside
  *          the Cell if it is on the same side of every Surface in the Cell.
  * @param coords a pointer to a localcoord
+ * @return whether the cell contains the coords or not
  */
 bool Cell::containsCoords(LocalCoords* coords) {
   return containsPoint(coords->getPoint());
@@ -1227,6 +1237,7 @@ bool Cell::containsCoords(LocalCoords* coords) {
  * @details If the trajectory will not intersect any of the Surfaces in the
  *          Cell returns INFINITY.
  * @param coords a pointer to a localcoords
+ * @return distance to nearest intersection with the cell's region boundaries
  */
 double Cell::minSurfaceDist(LocalCoords* coords) {
   if (_region == NULL)
@@ -1246,7 +1257,7 @@ double Cell::minSurfaceDist(LocalCoords* coords) {
  *        (in radians from \f$[0,2\pi]\f$)
  * @param polar the polar angle of the trajectory
  *        (in radians from \f$[0,\pi]\f$)
- * @param min_intersection a pointer to the intersection Point that is found
+ * @return distance to nearest intersection with the cell's region boundaries
  */
 double Cell::minSurfaceDist(Point* point, double azim, double polar) {
   if (_region == NULL)
@@ -1364,8 +1375,8 @@ void Cell::sectorize(std::vector<Cell*>& subcells) {
         sector->addSurface(-1, planes.at(0));
     }
     else {
-      /* For _num_sectors==2, planes[0] and planes[1] are actually the same but 
-         opposite direction, so the two adjacent sectors will have the same 
+      /* For _num_sectors==2, planes[0] and planes[1] are actually the same but
+         opposite direction, so the two adjacent sectors will have the same
          Halfspace value, which will cause trouble when a point is on the plane.
          This is to avoid this trouble. */
       int halfspace = (i==0? +1 : -1);
@@ -1672,7 +1683,7 @@ std::string Cell::toString() {
   std::map<int, Halfspace*> _surfaces = getSurfaces();
   string << ", Surfaces: ";
   for (iter = _surfaces.begin(); iter != _surfaces.end(); ++iter)
-    string << std::showpos << "\nhalfspace = " << iter->second->_halfspace 
+    string << std::showpos << "\nhalfspace = " << iter->second->_halfspace
            << ", " << iter->second->_surface->toString();
 
   return string.str();

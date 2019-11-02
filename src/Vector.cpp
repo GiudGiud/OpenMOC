@@ -74,6 +74,9 @@ void Vector::incrementValue(int cell, int group, CMFD_PRECISION val) {
 
   /* Release Vector cell mutual exclusion lock */
   omp_unset_lock(&_cell_locks[cell]);
+#ifdef INTEL
+#pragma omp flush
+#endif
 }
 
 
@@ -115,6 +118,9 @@ void Vector::incrementValues(int cell, int group_first, int group_last,
 
   /* Release Vector cell mutual exclusion lock */
   omp_unset_lock(&_cell_locks[cell]);
+#ifdef INTEL
+#pragma omp flush
+#endif
 }
 
 
@@ -154,6 +160,9 @@ void Vector::setValue(int cell, int group, CMFD_PRECISION val) {
 
   /* Release Vector cell mutual exclusion lock */
   omp_unset_lock(&_cell_locks[cell]);
+#ifdef INTEL
+#pragma omp flush
+#endif
 }
 
 
@@ -188,12 +197,15 @@ void Vector::setValues(int cell, int group_first, int group_last,
    * temporary array using mutual exclusion locks */
   omp_set_lock(&_cell_locks[cell]);
 
-  #pragma omp simd
+#pragma omp simd
   for (int g=group_first; g <= group_last; g++)
     _array[cell*_num_groups + g] = vals[g-group_first];
 
   /* Release Vector cell mutual exclusion lock */
   omp_unset_lock(&_cell_locks[cell]);
+#ifdef INTEL
+#pragma omp flush
+#endif
 }
 
 
@@ -211,7 +223,7 @@ void Vector::clear() {
  */
 void Vector::scaleByValue(CMFD_PRECISION val) {
 
-  #pragma omp parallel for schedule(guided)
+#pragma omp parallel for schedule(guided)
   for (int i=0; i < _num_rows; i++)
     _array[i] *= val;
 }
@@ -245,16 +257,6 @@ void Vector::printString() {
  */
 void Vector::copyTo(Vector* vector) {
   std::copy(_array, _array + _num_rows, vector->getArray());
-}
-
-
-/**
- * @brief Get a value at location described by a given cell and group index.
- * @param cell The cell location index.
- * @param group The group location index.
- */
-CMFD_PRECISION Vector::getValue(int cell, int group) {
-  return _array[cell*_num_groups + group];
 }
 
 
@@ -318,6 +320,21 @@ int Vector::getNumRows() {
  */
 double Vector::getSum() {
   return pairwise_sum(_array, _num_rows);
+}
+
+
+/**
+ * @brief Get the number of negative values in the vector.
+ * @return The number of negative values in the vector.
+ */
+long  Vector::getNumNegativeValues() {
+
+  long num_negative_values = 0;
+#pragma omp simd reduction(+:num_negative_values)
+  for (long i=0; i<_num_rows; i++) 
+    num_negative_values += (_array[i] < 0);
+
+  return num_negative_values;
 }
 
 

@@ -31,6 +31,7 @@ Geometry::Geometry() {
   _domain_index_x = 1;
   _domain_index_y = 1;
   _domain_index_z = 1;
+  _symmetries.resize(3, false);
   _domain_FSRs_counted = false;
   _contains_FSR_centroids = false;
   _twiddle = false;
@@ -607,6 +608,17 @@ void Geometry::getDomainIndexes(int* indexes) {
 
 
 /**
+ * @brief Returns the number of domains in each direction.
+ * @param structure A pointer to the array to be filled with the domain numbers
+ */
+void Geometry::getDomainStructure(int* structure) {
+  structure[0] = _num_domains_x;
+  structure[1] = _num_domains_y;
+  structure[2] = _num_domains_z;
+}
+
+
+/**
  * @brief Sets the root Universe for the CSG tree.
  * @param root_universe the root Universe of the CSG tree.
  */
@@ -658,6 +670,82 @@ int Geometry::getNumYModules() {
  */
 int Geometry::getNumZModules() {
   return _num_modules_z;
+}
+
+
+/**
+ * @brief Take into account domain symmetries to reduce the problem domain.
+ * @param X_symmetry whether the domain is symmetric in X
+ * @param Y_symmetry whether the domain is symmetric in Y
+ * @param Z_symmetry whether the domain is symmetric in Z
+ */
+void Geometry::useSymmetry(bool X_symmetry, bool Y_symmetry, bool Z_symmetry) {
+
+  if (_root_universe->getCells().size() > 1)
+    log_printf(ERROR, "To take advantage of the problem symmetries, use a root"
+               " universe AND a root cell to contain the CSG.");
+
+#ifdef ONLYVACUUMBC
+  if (X_symmetry || Y_symmetry || Z_symmetry)
+    log_printf(ERROR, "Using symmetries requires reflective boundary conditions"
+               ", re-compile without the ONLYVACUUMBC flag.");
+#endif
+
+  // Keep track of symmetries used
+  _symmetries[0] = X_symmetry;
+  _symmetries[1] = Y_symmetry;
+  _symmetries[2] = Z_symmetry;
+
+  if (X_symmetry) {
+    // Get center plane
+    double mid_x = (_root_universe->getMaxX() + _root_universe->getMinX()) / 2;
+    XPlane* symX = new XPlane(mid_x);
+    symX->setBoundaryType(REFLECTIVE);
+
+    // Add plane to root cell
+    Cell* root_cell = _root_universe->getCells().begin()->second;
+    root_cell->addSurface(+1, symX);
+    log_printf(NORMAL, "Using X symmetry to restrict domain to [%.3f %.3f] cm",
+                mid_x, _root_universe->getMaxX());
+  }
+
+  if (Y_symmetry) {
+    // Get center plane
+    double mid_y = (_root_universe->getMaxY() + _root_universe->getMinY()) / 2;
+    YPlane* symY = new YPlane(mid_y);
+    symY->setBoundaryType(REFLECTIVE);
+
+    // Add plane to root cell
+    Cell* root_cell = _root_universe->getCells().begin()->second;
+    root_cell->addSurface(+1, symY);
+    log_printf(NORMAL, "Using Y symmetry to restrict domain to [%.3f %.3f] cm",
+               mid_y, _root_universe->getMaxY());
+  }
+
+  if (Z_symmetry) {
+    // Get center planes
+    double mid_z = (_root_universe->getMaxZ() + _root_universe->getMinZ()) / 2;
+    ZPlane* symZ = new ZPlane(mid_z);
+    symZ->setBoundaryType(REFLECTIVE);
+
+    // Add plane to root cell
+    Cell* root_cell = _root_universe->getCells().begin()->second;
+    root_cell->addSurface(+1, symZ);
+    log_printf(NORMAL, "Using Z symmetry to restrict domain to [%.3f %.3f] cm",
+               mid_z, _root_universe->getMaxZ());
+  }
+
+  // Reset boundaries to trigger boundary calculation again
+  _root_universe->resetBoundaries();
+}
+
+
+/**
+ * @brief Get the symmetries used to restrict the domain
+ * @return a boolean indicating if the symmetry along this axis is used
+ */
+bool Geometry::getSymmetry(int axis) {
+  return _symmetries[axis];
 }
 
 
@@ -918,7 +1006,8 @@ Cell* Geometry::findCellContainingCoords(LocalCoords* coords) {
  *          each LocalCoord in the linked list for the Lattice or Universe
  *          that it is in.
  * @param coords pointer to a LocalCoords object
- * @param angle the angle for a trajectory projected from the LocalCoords
+ * @param azim the azimuthal angle for a trajectory projected from the LocalCoords
+ * @param polar the polar angle for a trajectory projected from the LocalCoords
  * @return returns a pointer to a cell if found, NULL if no cell found
 */
 Cell* Geometry::findFirstCell(LocalCoords* coords, double azim, double polar) {
@@ -969,7 +1058,8 @@ Material* Geometry::findFSRMaterial(long fsr_id) {
  *          return a pointer to the Cell that the LocalCoords will reach
  *          next along its trajectory.
  * @param coords pointer to a LocalCoords object
- * @param angle the angle of the trajectory
+ * @param azim the azimuthal angle of the trajectory
+ * @param polar the polar angle of the trajectory
  * @return a pointer to a Cell if found, NULL if no Cell found
  */
 Cell* Geometry::findNextCell(LocalCoords* coords, double azim, double polar) {
@@ -1220,6 +1310,7 @@ int Geometry::findExtrudedFSR(LocalCoords* coords) {
  * @brief Return the ID of the flat source region that a given
  *        LocalCoords object resides within.
  * @param coords a LocalCoords object pointer
+ * @param err_check whether to fail instead of returning -1 if not found
  * @return the FSR ID for a given LocalCoords object
  */
 long Geometry::getFSRId(LocalCoords* coords, bool err_check) {
@@ -1309,6 +1400,7 @@ std::map<Cell*, std::vector<long> > Geometry::getCellsToFSRs() {
  * @brief Return the global ID of the flat source region that a given
  *        LocalCoords object resides within.
  * @param coords a LocalCoords object pointer
+ * @param err_check whether to fail instead of returning -1 if not found
  * @return the FSR ID for a given LocalCoords object
  */
 long Geometry::getGlobalFSRId(LocalCoords* coords, bool err_check) {
@@ -1527,7 +1619,7 @@ void Geometry::reserveKeyStrings(int num_threads) {
  *          creates a unique FSR key by constructing a structured string
  *          that describes the hierarchy of lattices/universes/cells.
  * @param coords a LocalCoords object pointer
- * @return the FSR key
+ * @param key a reference to the FSR key
  */
 void Geometry::getFSRKeyFast(LocalCoords* coords, std::string& key) {
 
@@ -1898,6 +1990,7 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
   int prev_fsr_id = -1;
   int next_fsr_id = -1;
 
+
   /* Use a LocalCoords for the start and end of each segment */
   LocalCoords start(x0, y0, z0, true);
   LocalCoords end(x0, y0, z0, true);
@@ -1927,8 +2020,8 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
     /* Checks that segment does not have the same start and end Points */
     if (fabs(start.getX() - end.getX()) < FLT_EPSILON
         && fabs(start.getY() - end.getY()) < FLT_EPSILON)
-      log_printf(ERROR, "Created 2D segment with same start and end "
-                 "point: x = %f, y = %f, z=%f", start.getX(), start.getY(),
+      log_printf(ERROR, "Created 2D segment with same start and end point: "
+                 "x = %f, y = %f, z = %f", start.getX(), start.getY(),
                  start.getZ());
 
     /* Find the segment length, Material and FSR ID */
@@ -1937,18 +2030,18 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
     fsr_id = findFSRId(&start);
 
     /* Create a new Track segment */
-    segment* new_segment = new segment;
-    new_segment->_material = material;
-    new_segment->_length = length;
-    new_segment->_region_id = fsr_id;
+    segment new_segment;
+    new_segment._material = material;
+    new_segment._length = length;
+    new_segment._region_id = fsr_id;
     if (prev_fsr_id == -1)
-      new_segment->_prev_region_id = fsr_id;
+      new_segment._prev_region_id = fsr_id;
     else
-      new_segment->_prev_region_id = prev_fsr_id;
+      new_segment._prev_region_id = prev_fsr_id;
     if (curr != NULL)
-      new_segment->_next_region_id = findFSRId(&end);
+      new_segment._next_region_id = findFSRId(&end);
     else
-      new_segment->_next_region_id = fsr_id;  //last one in segment
+      new_segment._next_region_id = fsr_id;  //last one in segment
 
     /* Save current fsr to make the previous one for the next segment */
     prev_fsr_id = fsr_id;
@@ -1999,8 +2092,8 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
       }
 
       /* Save CMFD surfaces */
-      new_segment->_cmfd_surface_fwd = cmfd_surfaces[0];
-      new_segment->_cmfd_surface_bwd = cmfd_surfaces[1];
+      new_segment._cmfd_surface_fwd = cmfd_surfaces[0];
+      new_segment._cmfd_surface_bwd = cmfd_surfaces[1];
 
       /* Re-nudge segments from surface. */
       start.adjustCoords(delta_x, delta_y);
@@ -2010,19 +2103,18 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
     /* Calculate the local centroid of the segment if available */
     //FIXME Consider reversing nudge
     Point* starting_point = start.getHighestLevel()->getPoint();
-    new_segment->_starting_position[0] = starting_point->getX();
-    new_segment->_starting_position[1] = starting_point->getY();
+    new_segment._starting_position[0] = starting_point->getX();
+    new_segment._starting_position[1] = starting_point->getY();
     if (_contains_FSR_centroids) {
       Point* centroid = getFSRCentroid(fsr_id);
       double x_start = starting_point->getX() - centroid->getX();
       double y_start = starting_point->getY() - centroid->getY();
-      new_segment->_starting_position[0] = x_start;
-      new_segment->_starting_position[1] = y_start;
+      new_segment._starting_position[0] = x_start;
+      new_segment._starting_position[1] = y_start;
     }
 
     /* Add the segment to the Track */
-    track->addSegment(new_segment);
-    delete new_segment;
+    track->addSegment(&new_segment);
   }
 
   log_printf(DEBUG, "Created %d segments for Track: %s",
@@ -2041,9 +2133,9 @@ void Geometry::segmentize2D(Track* track, double z_coord) {
  *          intersection points with FSRs as the Track crosses through the
  *          Geometry and creates segment structs and adds them to the Track.
  * @param track a pointer to a track to segmentize
- * @param setup whether the segmentize routine is called during OTF setup
+ * @param OTF_setup whether this routine is called during OTF ray tracing setup
  */
-void Geometry::segmentize3D(Track3D* track, bool setup) {
+void Geometry::segmentize3D(Track3D* track, bool OTF_setup) {
 
   /* Track starting Point coordinates and azimuthal angle */
   double x0 = track->getStart()->getX();
@@ -2051,13 +2143,10 @@ void Geometry::segmentize3D(Track3D* track, bool setup) {
   double z0 = track->getStart()->getZ();
   double phi = track->getPhi();
   double theta = track->getTheta();
-  double delta_x, delta_y, delta_z;
 
   /* Length of each segment */
   double length;
-  Material* material;
   long fsr_id;
-  int num_segments;
 
   /* Use a LocalCoords for the start and end of each segment */
   LocalCoords start(x0, y0, z0, true);
@@ -2071,15 +2160,6 @@ void Geometry::segmentize3D(Track3D* track, bool setup) {
 
   /* Vector to fill coordinates if necessary */
   std::vector<LocalCoords*> fsr_coords;
-  LocalCoords* preallocation;
-  int preallocation_size = 0;
-  if (setup) {
-    if (_overlaid_mesh != NULL && false) {
-      preallocation_size = _overlaid_mesh->getNumZ();
-      preallocation = new LocalCoords[preallocation_size];
-      fsr_coords.reserve(preallocation_size);
-    }
-  }
 
   /* If starting Point was outside the bounds of the Geometry */
   if (curr == NULL)
@@ -2107,30 +2187,15 @@ void Geometry::segmentize3D(Track3D* track, bool setup) {
                  start.getY(), start.getZ());
     }
 
-    /* Find the segment length between the segment's start and end points */
-    length = double(end.getPoint()->distanceToPoint(start.getPoint()));
-    material = prev->getFillMaterial();
-
-    /* Get the FSR ID or save the coordinates */
-    long fsr_id = -1;
-    if (setup && false) {
-      LocalCoords* new_fsr_coords;
-      if (fsr_coords.size() >= preallocation_size)
-        new_fsr_coords = new LocalCoords(0, 0, 0, true);
-      else
-        new_fsr_coords = &preallocation[fsr_coords.size()];
-      start.copyCoords(new_fsr_coords);
-      fsr_coords.push_back(new_fsr_coords);
-    }
-    else {
-      fsr_id = findFSRId(&start);
-    }
+    /* Find the segment length and its region's id */
+    length = end.getPoint()->distanceToPoint(start.getPoint());
+    long fsr_id = findFSRId(&start);
 
     /* Create a new Track segment */
-    segment* new_segment = new segment;
-    new_segment->_material = material;
-    new_segment->_length = length;
-    new_segment->_region_id = fsr_id;
+    segment new_segment;
+    new_segment._material = prev->getFillMaterial();
+    new_segment._length = length;
+    new_segment._region_id = fsr_id;
 
     log_printf(DEBUG, "segment start x = %f, y = %f, z = %f; "
                "end x = %f, y = %f, z = %f",
@@ -2138,7 +2203,7 @@ void Geometry::segmentize3D(Track3D* track, bool setup) {
                end.getX(), end.getY(), end.getZ());
 
     /* Save indices of CMFD Mesh surfaces that the Track segment crosses */
-    if (_cmfd != NULL && !setup) {
+    if (_cmfd != NULL && !OTF_setup) {
 
       /* Find cmfd cell that segment lies in */
       int cmfd_cell = _cmfd->findCmfdCell(&start);
@@ -2151,9 +2216,9 @@ void Geometry::segmentize3D(Track3D* track, bool setup) {
       start.adjustCoords(-delta_x, -delta_y, -delta_z);
       end.adjustCoords(-delta_x, -delta_y, -delta_z);
 
-      new_segment->_cmfd_surface_fwd =
+      new_segment._cmfd_surface_fwd =
         _cmfd->findCmfdSurface(cmfd_cell, &end);
-      new_segment->_cmfd_surface_bwd =
+      new_segment._cmfd_surface_bwd =
         _cmfd->findCmfdSurface(cmfd_cell, &start);
 
       /* Re-nudge segments from surface. */
@@ -2161,43 +2226,29 @@ void Geometry::segmentize3D(Track3D* track, bool setup) {
       end.adjustCoords(delta_x, delta_y, delta_z);
     }
 
-    /* Calculate the local centroid of the segment if available */
-    if (!setup) {
-      //Point* centroid = getFSRCentroid(fsr_id);
+    /* For regular 3D tracks, get starting position relative to FSR centroid */
+    if (!OTF_setup) {
       Point* starting_point = start.getHighestLevel()->getPoint();
-      double x_start = starting_point->getX();
-      double y_start = starting_point->getY();
-      double z_start = starting_point->getZ();
-      new_segment->_starting_position[0] = x_start;
-      new_segment->_starting_position[1] = y_start;
-      new_segment->_starting_position[2] = z_start;
+      new_segment._starting_position[0] = starting_point->getX();
+      new_segment._starting_position[1] = starting_point->getY();
+      new_segment._starting_position[2] = starting_point->getZ();
+      if (_contains_FSR_centroids) {
+        Point* centroid = getFSRCentroid(fsr_id);
+        double x_start = starting_point->getX() - centroid->getX();
+        double y_start = starting_point->getY() - centroid->getY();
+        double z_start = starting_point->getZ() - centroid->getZ();
+        new_segment._starting_position[0] = x_start;
+        new_segment._starting_position[1] = y_start;
+        new_segment._starting_position[2] = z_start;
+      }
     }
 
     /* Add the segment to the Track */
-    track->addSegment(new_segment);
-    delete new_segment;
+    track->addSegment(&new_segment);
   }
 
   log_printf(DEBUG, "Created %d segments for Track3D: %s",
              track->getNumSegments(), track->toString().c_str());
-
-  /* Search FSR IDs if necessary */
-  if (setup && false) {
-#pragma omp critical
-    {
-      for (int s=0; s < track->getNumSegments(); s++) {
-        long fsr_id = findFSRId(fsr_coords.at(s));
-        track->getSegment(s)->_region_id = fsr_id;
-      }
-    }
-
-    for (int s=0; s < fsr_coords.size(); s++)
-      fsr_coords.at(s)->prune();
-
-    if (preallocation_size > 0)
-      delete [] preallocation;
-  }
-
 
   /* Truncate the linked list for the LocalCoords */
   start.prune();
@@ -2236,7 +2287,6 @@ void Geometry::segmentizeExtruded(Track* flattened_track,
   double length;
   int min_z_ind;
   int region_id;
-  int num_segments;
 
   /* Use a LocalCoords for the start and end of each segment */
   LocalCoords start(x0, y0, z0, true);
@@ -2255,16 +2305,11 @@ void Geometry::segmentizeExtruded(Track* flattened_track,
   if (curr == NULL) {
     int dom = _domain_index_x + _domain_index_y * _num_domains_x +
       _domain_index_z * _num_domains_x * _num_domains_y;
-    double min_x = getMinX();
-    double max_x = getMaxX();
-    double min_y = getMinY();
-    double max_y = getMaxY();
-    double min_z = getMinZ();
-    double max_z = getMaxZ();
     log_printf(ERROR, "Could not find a Cell containing the start Point "
                "of this Track: %s on domain %d with bounds [%f, %f] x [%f, %f]"
-               " x [%f, %f]", flattened_track->toString().c_str(), dom, min_x,
-               max_x, min_y, max_y, min_z, max_z);
+               " x [%f, %f]", flattened_track->toString().c_str(), dom,
+               getMinX(), getMaxX(), getMinY(), getMaxY(), getMinZ(),
+               getMaxZ());
   }
 
   /* While the end of the segment's LocalCoords is still within the Geometry,
@@ -2391,9 +2436,9 @@ void Geometry::segmentizeExtruded(Track* flattened_track,
                  "segmentation");
 
     /* Create a new 2D Track segment with extruded region ID */
-    segment* new_segment = new segment;
-    new_segment->_length = min_length;
-    new_segment->_region_id = region_id;
+    segment new_segment;
+    new_segment._length = min_length;
+    new_segment._region_id = region_id;
 
     /* Save indices of CMFD Mesh surfaces that the Track segment crosses */
     if (_cmfd != NULL) {
@@ -2438,8 +2483,8 @@ void Geometry::segmentizeExtruded(Track* flattened_track,
       }
 
       /* Save CMFD surfaces */
-      new_segment->_cmfd_surface_fwd = cmfd_surfaces[0];
-      new_segment->_cmfd_surface_bwd = cmfd_surfaces[1];
+      new_segment._cmfd_surface_fwd = cmfd_surfaces[0];
+      new_segment._cmfd_surface_bwd = cmfd_surfaces[1];
 
       /* Re-nudge segments from surface. */
       start.adjustCoords(delta_x, delta_y, 0);
@@ -2447,8 +2492,7 @@ void Geometry::segmentizeExtruded(Track* flattened_track,
     }
 
     /* Add the segment to the 2D track */
-    flattened_track->addSegment(new_segment);
-    delete new_segment;
+    flattened_track->addSegment(&new_segment);
   }
 
   /* Truncate the linked list for the LocalCoords */
@@ -2498,6 +2542,7 @@ void Geometry::initializeAxialFSRs(std::vector<double> global_z_mesh) {
   if (_overlaid_mesh != NULL)
     anticipated_size *= _overlaid_mesh->getNumZ();
   _FSR_keys_map.realloc(anticipated_size);
+  long total_number_fsrs_in_stack = 0;
 
   /* Loop over extruded FSRs */
 #pragma omp parallel for
@@ -2575,12 +2620,30 @@ void Geometry::initializeAxialFSRs(std::vector<double> global_z_mesh) {
       extruded_FSR->_mesh[s+1] = level;
       }
     }
+    /* Keep track of the number of FSRs in extruded FSRs */
+#pragma omp atomic update
+    total_number_fsrs_in_stack += extruded_FSR->_num_fsrs;
   }
+
   delete [] extruded_FSRs;
 #ifdef MPIx
   if (_domain_decomposed)
     MPI_Barrier(_MPI_cart);
 #endif
+
+  // Output the extruded FSR storage requirement
+  float size = total_number_fsrs_in_stack * (sizeof(double) + sizeof(long) +
+             sizeof(Material*)) + _extruded_FSR_keys_map.size() * (sizeof(
+             _extruded_FSR_keys_map.keys()[0]) + sizeof(ExtrudedFSR) +
+             (LOCAL_COORDS_LEN + 1) * sizeof(LocalCoords));
+  float max_size = size;
+#ifdef MPIX
+    if (isDomainDecomposed())
+      MPI_Allreduce(&size, &max_size, 1, MPI_FLOAT, MPI_MAX, _MPI_cart);
+#endif
+
+  log_printf(INFO_ONCE, "Max storage for extruded FSRs per domain = %.2f MB",
+             max_size / float(1e6));
 
   /* Re-order FSR IDs so they are sequential in the axial direction */
   reorderFSRIDs();
@@ -2674,7 +2737,7 @@ void Geometry::initializeFSRVectors() {
   _FSRs_to_CMFD_cells = std::vector<int>(num_FSRs);
 
   /* Fill vectors key and material ID information */
-  #pragma omp parallel for
+#pragma omp parallel for
   for (long i=0; i < num_FSRs; i++) {
     std::string key = key_list[i];
     fsr_data* fsr = value_list[i];
@@ -2692,6 +2755,18 @@ void Geometry::initializeFSRVectors() {
       _FSRs_to_CMFD_cells.at(fsr_id) = fsr->_cmfd_cell;
     }
   }
+
+  /* Output approximate storage for various FSR maps, locks, volumes... */
+  long size = num_FSRs * (sizeof(fsr_data) + sizeof(omp_lock_t) +
+       sizeof(FP_PRECISION) + sizeof(fsr_data*) + 2 * sizeof(key_list[0]) +
+       sizeof(Point*) + sizeof(Point) + 2*sizeof(int));
+  long max_size = size;
+#ifdef MPIX
+  if (isDomainDecomposed())
+    MPI_Allreduce(&size, &max_size, 1, MPI_LONG, MPI_MAX, _MPI_cart);
+#endif
+  log_printf(INFO_ONCE, "Max FSR, maps and data, storage per domain = %.2f MB",
+             max_size / float(1e6));
 
   /* Check if extruded FSRs are present */
   size_t num_extruded_FSRs = _extruded_FSR_keys_map.size();
@@ -3075,9 +3150,8 @@ void Geometry::initializeCmfd() {
   else
     offset.setZ(0.);
 
-  _cmfd->initializeLattice(&offset);
-
   _cmfd->setGeometry(this);
+  _cmfd->initializeLattice(&offset);
 
 #ifdef MPIx
   if (_domain_decomposed) {
@@ -3139,8 +3213,8 @@ void Geometry::initializeSpectrumCalculator(Cmfd* spectrum_calculator) {
   offset.setY(min_y + (max_y - min_y)/2.0);
   offset.setZ(min_z + (max_z - min_z)/2.0);
 
-  spectrum_calculator->initializeLattice(&offset);
   spectrum_calculator->setGeometry(this);
+  spectrum_calculator->initializeLattice(&offset);
 
 #ifdef MPIx
   if (_domain_decomposed) {
@@ -3506,6 +3580,14 @@ std::vector<double> Geometry::getUniqueZPlanes() {
     unique_z_planes.push_back(mid);
   }
 
+  /* Output the unique Z heights for debugging */
+  std::stringstream string;
+  string << unique_heights.size() - 1 << " unique Z domains with bounds: ";
+  for (int i=0; i < unique_heights.size(); i++)
+    string << unique_heights[i] << " ";
+  string << "(cm)";
+  log_printf(INFO, "%s", string.str().c_str());
+
   return unique_z_planes;
 }
 
@@ -3518,6 +3600,9 @@ void Geometry::dumpToFile(std::string filename) {
 
   FILE* out;
   out = fopen(filename.c_str(), "w");
+  if (out == NULL)
+    log_printf(ERROR, "Geometry file %s cannot be written. Wrong folder?",
+               &filename[0]);
 
   /* Print number of energy groups */
   int num_groups = getNumEnergyGroups();
@@ -3882,7 +3967,9 @@ void Geometry::loadFromFile(std::string filename, bool twiddle) {
   if (_root_universe != NULL)
     delete _root_universe;
 
-  log_printf(NORMAL, "Reading Geometry from %s", filename.c_str());
+  log_printf(NORMAL, "Reading Geometry from %s", &filename[0]);
+  if (in == NULL)
+    log_printf(ERROR, "Geometry file %s was not found.", &filename[0]);
 
   std::map<int, Surface*> all_surfaces;
   std::map<int, Cell*> all_cells;

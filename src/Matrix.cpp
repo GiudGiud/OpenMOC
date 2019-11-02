@@ -79,7 +79,7 @@ Matrix::~Matrix() {
  * @param cell_from The origin cell.
  * @param group_from The origin group.
  * @param cell_to The destination cell.
- * @param group_from The destination group.
+ * @param group_to The destination group.
  * @param val The value used to increment the row/column location.
  */
 void Matrix::incrementValue(int cell_from, int group_from,
@@ -108,6 +108,9 @@ void Matrix::incrementValue(int cell_from, int group_from,
 
   /* Release Matrix cell mutual exclusion lock */
   omp_unset_lock(&_cell_locks[cell_to]);
+#ifdef INTEL
+#pragma omp flush
+#endif
 
   /* Set global modified flag to true */
   _modified = true;
@@ -124,7 +127,7 @@ void Matrix::incrementValue(int cell_from, int group_from,
  * @param cell_from The origin cell.
  * @param group_from The origin group.
  * @param cell_to The destination cell.
- * @param group_from The destination group.
+ * @param group_to The destination group.
  * @param val The value used to set the row/column location.
  */
 void Matrix::setValue(int cell_from, int group_from,
@@ -153,6 +156,9 @@ void Matrix::setValue(int cell_from, int group_from,
 
   /* Release Matrix cell mutual exclusion lock */
   omp_unset_lock(&_cell_locks[cell_to]);
+#ifdef INTEL
+#pragma omp flush
+#endif
 
   /* Set global modified flag to true */
   _modified = true;
@@ -192,12 +198,14 @@ void Matrix::convertToCSR() {
   if (_DIAG != NULL)
     delete [] _DIAG;
 
+  log_printf(INFO_ONCE, "Matrix CSR format storage %6.2f MB", (NNZ + _num_rows)
+             * 2 * (sizeof(CMFD_PRECISION) + sizeof(int)) / float(1e6));
+
   /* Allocate memory for arrays */
   _A = new CMFD_PRECISION[NNZ];
   _IA = new int[_num_rows+1];
   _JA = new int[NNZ];
-  _DIAG = new CMFD_PRECISION[_num_rows];
-  std::fill_n(_DIAG, _num_rows, 0.0);
+  _DIAG = new CMFD_PRECISION[_num_rows]();
 
   /* Form arrays */
   int j = 0;
@@ -205,7 +213,7 @@ void Matrix::convertToCSR() {
   for (int row=0; row < _num_rows; row++) {
     _IA[row] = j;
     for (iter = _LIL[row].begin(); iter != _LIL[row].end(); ++iter) {
-      if (fabs(iter->second) > FLT_EPSILON) {
+      if (fabs(iter->second) > 0) {
         _JA[j] = iter->first;
         _A[j] = iter->second;
 
@@ -262,7 +270,7 @@ void Matrix::printString() {
  * @param cell_from The origin cell.
  * @param group_from The origin group.
  * @param cell_to The destination cell.
- * @param group_from The destination group.
+ * @param group_to The destination group.
  * @return The value at the corresponding row/column location.
  */
 CMFD_PRECISION Matrix::getValue(int cell_from, int group_from,

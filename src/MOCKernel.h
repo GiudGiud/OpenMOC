@@ -53,7 +53,7 @@ protected:
 
 public:
 
-  MOCKernel(TrackGenerator* track_generator, int row_num);
+  MOCKernel(TrackGenerator* track_generator);
   virtual ~MOCKernel();
 
   /* Function to get the current segment count */
@@ -86,7 +86,7 @@ public:
 class CounterKernel: public MOCKernel {
 
 public:
-  CounterKernel(TrackGenerator* track_generator, int row_num);
+  CounterKernel(TrackGenerator* track_generator);
   void execute(FP_PRECISION length, Material* mat, long fsr_id,
                long prev_fsr_id, long next_fsr_id,
                int track_idx, int cmfd_surface_fwd, int cmfd_surface_bwd,
@@ -122,7 +122,7 @@ private:
 
 public:
 
-  VolumeKernel(TrackGenerator* track_generator, int row_num);
+  VolumeKernel(TrackGenerator* track_generator);
   void newTrack(Track* track);
   void execute(FP_PRECISION length, Material* mat, long fsr_id,
                long prev_fsr_id, long next_fsr_id,
@@ -148,7 +148,7 @@ private:
   segment* _segments;
 
 public:
-  SegmentationKernel(TrackGenerator* track_generator, int row_num);
+  SegmentationKernel(TrackGenerator* track_generator);
   void execute(FP_PRECISION length, Material* mat, long fsr_id,
                long prev_fsr_id, long next_fsr_id,
                int track_idx, int cmfd_surface_fwd, int cmfd_surface_bwd,
@@ -169,11 +169,17 @@ private:
   /** Pointer to CPUSolver enabling use of transport functions */
   CPUSolver* _cpu_solver;
 
+  /** Pointer to TrackGenerator enabling use of ray tracer on the fly */
+  TrackGenerator* _track_generator;
+
   /** Pointer to angular flux data in the current direction */
   FP_PRECISION* _thread_fsr_flux;
 
   /** Azimuthal index of the current track */
   int _azim_index;
+
+  /** XY index of the current track within tracks of that azimuthal angle */
+  int _xy_index;
 
   /** Polar index of the current track */
   int _polar_index;
@@ -188,7 +194,7 @@ private:
   int _max_track_idx;
 
 public:
-  TransportKernel(TrackGenerator* track_generator, int row_num);
+  TransportKernel(TrackGenerator* track_generator);
   virtual ~TransportKernel();
   void newTrack(Track* track);
   void setCPUSolver(CPUSolver* cpu_solver);
@@ -196,6 +202,7 @@ public:
                     int track_id);
   void setTrackIndexes(int azim_index, int polar_index);
   void setDirection(bool direction);
+  bool getDirection();
   void execute(FP_PRECISION length, Material* mat, long fsr_id,
                long prev_fsr_id, long next_fsr_id,
                int track_idx, int cmfd_surface_fwd, int cmfd_surface_bwd,

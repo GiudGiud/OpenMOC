@@ -10,6 +10,7 @@
  */
 MaxOpticalLength::MaxOpticalLength(TrackGenerator* track_generator)
                                  : TraverseSegments(track_generator) {
+  _min_tau = 1e6;
   _max_tau = 0;
 }
 
@@ -29,10 +30,31 @@ void MaxOpticalLength::execute() {
 
 #pragma omp parallel
   {
-    MOCKernel* kernel = getKernel<SegmentationKernel>();
-    loopOverTracks(kernel);
+    // OTF ray tracing requires segmentation of tracks
+    if (_segment_formation != EXPLICIT_2D &&
+        _segment_formation != EXPLICIT_3D) {
+      MOCKernel* kernel = getKernel<SegmentationKernel>();
+      loopOverTracks(kernel);
+    }
+    else
+      loopOverTracks(NULL);
   }
   _track_generator->setMaxOpticalLength(_max_tau);
+
+  /* Notify user of the range of optical lengths present in the geometry */
+  Geometry* geometry = _track_generator->getGeometry();
+  float global_min_tau = _min_tau;
+  float global_max_tau = _max_tau;
+#ifdef MPIx
+  if (geometry->isDomainDecomposed()) {
+    MPI_Allreduce(&_min_tau, &global_min_tau, 1, MPI_FLOAT, MPI_MIN,
+                  geometry->getMPICart());
+    MPI_Allreduce(&_max_tau, &global_max_tau, 1, MPI_FLOAT, MPI_MAX,
+                  geometry->getMPICart());
+  }
+#endif
+  log_printf(INFO_ONCE, "Min/max optical lengths in geometry %.2e / %.2e",
+             global_min_tau, global_max_tau);
 }
 
 
@@ -59,6 +81,10 @@ void MaxOpticalLength::onTrack(Track* track, segment* segments) {
     if (tau > _max_tau) {
 #pragma omp critical
       _max_tau = std::max(_max_tau, tau);
+    }
+    if (tau < _min_tau) {
+#pragma omp critical
+      _min_tau = std::min(_min_tau, tau);
     }
   }
 }
@@ -212,29 +238,28 @@ void SegmentSplitter::onTrack(Track* track, segment* segments) {
     for (int k=0; k < min_num_cuts; k++) {
 
       /* Create a new Track segment */
-      segment* new_segment = new segment;
-      new_segment->_material = material;
-      new_segment->_length = length / min_num_cuts;
-      new_segment->_region_id = fsr_id;
+      segment new_segment;
+      new_segment._material = material;
+      new_segment._length = length / min_num_cuts;
+      new_segment._region_id = fsr_id;
 
       /* Assign CMFD surface boundaries */
       if (k == 0)
-        new_segment->_cmfd_surface_bwd = cmfd_surface_bwd;
+        new_segment._cmfd_surface_bwd = cmfd_surface_bwd;
 
       if (k == min_num_cuts-1)
-        new_segment->_cmfd_surface_fwd = cmfd_surface_fwd;
+        new_segment._cmfd_surface_fwd = cmfd_surface_fwd;
 
       /* Set the starting position */
-      new_segment->_starting_position[0] = x_curr;
-      new_segment->_starting_position[1] = y_curr;
-      new_segment->_starting_position[2] = z_curr;
-      x_curr += new_segment->_length * xdir;
-      y_curr += new_segment->_length * ydir;
-      z_curr += new_segment->_length * zdir;
+      new_segment._starting_position[0] = x_curr;
+      new_segment._starting_position[1] = y_curr;
+      new_segment._starting_position[2] = z_curr;
+      x_curr += new_segment._length * xdir;
+      y_curr += new_segment._length * ydir;
+      z_curr += new_segment._length * zdir;
 
       /* Insert the new segment to the Track */
-      track->insertSegment(s+k+1, new_segment);
-      delete new_segment;
+      track->insertSegment(s+k+1, &new_segment);
     }
 
     /* Remove the original segment from the Track */
@@ -323,8 +348,14 @@ CentroidGenerator::~CentroidGenerator() {
 void CentroidGenerator::execute() {
 #pragma omp parallel
   {
-    MOCKernel* kernel = getKernel<SegmentationKernel>();
-    loopOverTracks(kernel);
+    // OTF ray tracing requires segmentation of tracks
+    if (_segment_formation != EXPLICIT_2D &&
+        _segment_formation != EXPLICIT_3D) {
+      MOCKernel* kernel = getKernel<SegmentationKernel>();
+      loopOverTracks(kernel);
+    }
+    else
+      loopOverTracks(NULL);
   }
 }
 
@@ -415,6 +446,9 @@ void CentroidGenerator::onTrack(Track* track, segment* segments) {
 
     /* Unset the lock for this FSR */
     omp_unset_lock(&_FSR_locks[fsr]);
+#ifdef INTEL
+#pragma omp flush
+#endif
 
     x += cos_phi * sin_theta * curr_segment->_length;
     y += sin_phi * sin_theta * curr_segment->_length;
@@ -443,7 +477,7 @@ LinearExpansionGenerator::LinearExpansionGenerator(CPULSSolver* solver)
   _FSR_locks = track_generator->getFSRLocks();
   _quadrature = track_generator->getQuadrature();
 #ifndef NGROUPS
-  _num_groups = track_generator->getGeometry()->getNumEnergyGroups();
+  _NUM_GROUPS = solver->getNumEnergyGroups();
 #endif
 
   /* Determine the number of linear coefficients */
@@ -460,7 +494,7 @@ LinearExpansionGenerator::LinearExpansionGenerator(CPULSSolver* solver)
   /* Reset linear source coefficients to zero */
   long size = track_generator->getGeometry()->getNumFSRs() * _NUM_COEFFS;
   _lin_exp_coeffs = new double[size]();
-  size *= _num_groups;
+  size *= _NUM_GROUPS;
   _src_constants = new double[size]();
 
   /* Create local thread tallies */
@@ -472,7 +506,7 @@ LinearExpansionGenerator::LinearExpansionGenerator(CPULSSolver* solver)
 
   _exp_evaluator = new ExpEvaluator();
 
-  std::string msg = "Initializing track linear source components";
+  std::string msg = "Initializing linear source constant components";
   _progress = new Progress(_track_generator->getNumTracks(), msg, 0.1,
                     track_generator->getGeometry(), true);
 }
@@ -500,8 +534,14 @@ LinearExpansionGenerator::~LinearExpansionGenerator() {
 void LinearExpansionGenerator::execute() {
 #pragma omp parallel
   {
-    MOCKernel* kernel = getKernel<SegmentationKernel>();
-    loopOverTracks(kernel);
+    // OTF ray tracing requires segmentation of tracks
+    if (_segment_formation != EXPLICIT_2D &&
+        _segment_formation != EXPLICIT_3D) {
+      MOCKernel* kernel = getKernel<SegmentationKernel>();
+      loopOverTracks(kernel);
+    }
+    else
+      loopOverTracks(NULL);
   }
 
   Geometry* geometry = _track_generator->getGeometry();
@@ -510,6 +550,7 @@ void LinearExpansionGenerator::execute() {
   double* lem = _lin_exp_coeffs;
   double* ilem = _solver->getLinearExpansionCoeffsBuffer();
   int nc = _NUM_COEFFS;
+  double max_ilem = 0;
 
   /* Invert the expansion coefficient matrix */
   if (_track_generator_3D != NULL) {
@@ -525,9 +566,11 @@ void LinearExpansionGenerator::execute() {
 
       double volume = _FSR_volumes[r];
       if (std::abs(det) < MIN_DET || volume < 1e-6) {
-        log_printf(INFO, "Unable to form linear source components in "
-                   "source region %d. Switching to flat source in that "
-                   "source region.", r);
+        if (volume > 0)
+          log_printf(DEBUG, "Unable to form linear source components in "
+                     "source region %d : determinant %.2e volume %.2e", r, det,
+                     volume);
+
 #pragma omp atomic update
         _num_flat++;
         ilem[r*nc + 0] = 0.0;
@@ -557,12 +600,10 @@ void LinearExpansionGenerator::execute() {
         /* Copy inverses */
         long ind = r*nc;
         for (int i=0; i < 6; i++) {
-          if (curr_ilem[i] < -1.0e10)
-            ilem[ind+i] = -1.0e10;
-          else if (curr_ilem[i] > 1.0e10)
-            ilem[ind+i] = 1.0e10;
-          else
-            ilem[ind+i] = curr_ilem[i];
+          ilem[ind+i] = curr_ilem[i];
+          if (curr_ilem[i] > max_ilem)
+#pragma omp critical
+            max_ilem = std::max(max_ilem, curr_ilem[i]);
         }
       }
     }
@@ -578,9 +619,8 @@ void LinearExpansionGenerator::execute() {
         ilem[r*nc + 0] = 0.0;
         ilem[r*nc + 1] = 0.0;
         ilem[r*nc + 2] = 0.0;
-        log_printf(INFO, "Unable to form linear source components in "
-                   "source region %d. Switching to flat source in that "
-                   "source region.", r);
+        log_printf(DEBUG, "Unable to form linear source components in "
+                   "source region %d : determinant = %.2e", r, det);
 #pragma omp atomic update
         _num_flat++;
       }
@@ -594,10 +634,14 @@ void LinearExpansionGenerator::execute() {
 
   /* Copy the source constants to buffer */
   FP_PRECISION* src_constants_buffer = _solver->getSourceConstantsBuffer();
-  long size = num_FSRs * _NUM_COEFFS * _num_groups;
+  long size = num_FSRs * _NUM_COEFFS * _NUM_GROUPS;
 #pragma omp parallel for
   for (long i=0; i < size; i++)
     src_constants_buffer[i] = _src_constants[i];
+
+  /* Notify user of any very large linear expansion matrix coefficient */
+  if (max_ilem > 1e10)
+    log_printf(INFO, "Max inverse linear expansion matrix coeff %e", max_ilem);
 
   /* Notify user of any regions needing to use a flat source approximation */
   int total_num_flat = _num_flat;
@@ -608,7 +652,7 @@ void LinearExpansionGenerator::execute() {
                   geometry->getMPICart());
     MPI_Allreduce(&num_FSRs, &total_num_FSRs, 1, MPI_LONG, MPI_SUM,
                   geometry->getMPICart());
-    }
+  }
 #endif
   if (total_num_flat > 0)
     if (geometry->isRootDomain())
@@ -647,7 +691,7 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
     double theta = track_3D->getTheta();
     sin_theta = sin(theta);
     cos_theta = cos(theta);
-    int polar_index = track_3D->getPolarIndex();
+    polar_index = track_3D->getPolarIndex();
     wgt *= _quadrature->getPolarSpacing(azim_index, polar_index)
         *_quadrature->getPolarWeight(azim_index, polar_index);
   }
@@ -677,8 +721,8 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
     double yc = y + length * 0.5 * sin_phi * sin_theta;
     double zc = z + length * 0.5 * cos_theta;
 
-    /* Set the FSR src constants buffer to zero */
-    double thread_src_constants[_num_groups * _NUM_COEFFS]  __attribute__
+    /* Allocate a buffer for the FSR source constants on the stack */
+    double thread_src_constants[_NUM_GROUPS * _NUM_COEFFS]  __attribute__
        ((aligned (VEC_ALIGNMENT)));
 
     /* Pre-compute non-energy dependent source constant terms */
@@ -686,18 +730,18 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
     double src_constant = vol_impact * length / 2.0;
 
 #pragma omp simd aligned(sigma_t)
-    for (int g=0; g < _num_groups; g++) {
+    for (int g=0; g < _NUM_GROUPS; g++) {
 
       thread_src_constants[g] = vol_impact * xc * xc;
-      thread_src_constants[_num_groups + g] = vol_impact * yc * yc;
-      thread_src_constants[2*_num_groups + g] = vol_impact * xc * yc;
+      thread_src_constants[_NUM_GROUPS + g] = vol_impact * yc * yc;
+      thread_src_constants[2*_NUM_GROUPS + g] = vol_impact * xc * yc;
 
 #ifndef THREED
       if (track_3D != NULL) {
 #endif
-        thread_src_constants[3*_num_groups + g] = vol_impact * xc * zc;
-        thread_src_constants[4*_num_groups + g] = vol_impact * yc * zc;
-        thread_src_constants[5*_num_groups + g] = vol_impact * zc * zc;
+        thread_src_constants[3*_NUM_GROUPS + g] = vol_impact * xc * zc;
+        thread_src_constants[4*_NUM_GROUPS + g] = vol_impact * yc * zc;
+        thread_src_constants[5*_NUM_GROUPS + g] = vol_impact * zc * zc;
 #ifndef THREED
       }
 #endif
@@ -715,9 +759,9 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
               * sin_theta;
 
           thread_src_constants[g] += cos_phi * cos_phi * G2_src;
-          thread_src_constants[_num_groups + g] += sin_phi * sin_phi
+          thread_src_constants[_NUM_GROUPS + g] += sin_phi * sin_phi
               * G2_src;
-          thread_src_constants[2*_num_groups + g] += sin_phi * cos_phi
+          thread_src_constants[2*_NUM_GROUPS + g] += sin_phi * cos_phi
               * G2_src;
         }
       }
@@ -728,15 +772,15 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
 
         thread_src_constants[g] += cos_phi * cos_phi * G2_src * sin_theta
              * sin_theta;
-        thread_src_constants[_num_groups + g] += sin_phi * sin_phi * G2_src
+        thread_src_constants[_NUM_GROUPS + g] += sin_phi * sin_phi * G2_src
              * sin_theta * sin_theta;
-        thread_src_constants[2*_num_groups + g] += sin_phi * cos_phi * G2_src
+        thread_src_constants[2*_NUM_GROUPS + g] += sin_phi * cos_phi * G2_src
              * sin_theta * sin_theta;
-        thread_src_constants[3*_num_groups + g] += cos_phi * cos_theta * G2_src
+        thread_src_constants[3*_NUM_GROUPS + g] += cos_phi * cos_theta * G2_src
              * sin_theta;
-        thread_src_constants[4*_num_groups + g] += sin_phi * cos_theta * G2_src
+        thread_src_constants[4*_NUM_GROUPS + g] += sin_phi * cos_theta * G2_src
              * sin_theta;
-        thread_src_constants[5*_num_groups + g] += cos_theta * cos_theta * G2_src;
+        thread_src_constants[5*_NUM_GROUPS + g] += cos_theta * cos_theta * G2_src;
 #ifndef THREED
       }
 #endif
@@ -763,14 +807,17 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
 
     /* Set the source constants for all groups and coefficients */
 #pragma omp simd
-    for (int g=0; g < _num_groups; g++) {
+    for (int g=0; g < _NUM_GROUPS; g++) {
       for (int i=0; i < _NUM_COEFFS; i++)
-        _src_constants[fsr*_num_groups*_NUM_COEFFS + i*_num_groups + g] +=
-          thread_src_constants[i*_num_groups + g];
+        _src_constants[fsr*_NUM_GROUPS*_NUM_COEFFS + i*_NUM_GROUPS + g] +=
+          thread_src_constants[i*_NUM_GROUPS + g];
     }
 
     /* Unset the lock for this FSR */
     omp_unset_lock(&_FSR_locks[fsr]);
+#ifdef INTEL
+#pragma omp flush
+#endif
   }
 
   /* Determine progress */
@@ -787,7 +834,7 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
 /**
  * @brief Constructor for TransportSweep calls the TraverseSegments
  *        constructor and initializes the associated CPUSolver to NULL.
- * @param track_generator The TrackGenerator to pull tracking information from
+ * @param cpu_solver The CPUSolver to use for propagating angular fluxes
  */
 TransportSweep::TransportSweep(CPUSolver* cpu_solver)
     : TraverseSegments(cpu_solver->getTrackGenerator()) {
@@ -796,7 +843,9 @@ TransportSweep::TransportSweep(CPUSolver* cpu_solver)
   _ls_solver = dynamic_cast<CPULSSolver*>(cpu_solver);
   TrackGenerator* track_generator = cpu_solver->getTrackGenerator();
   _geometry = _track_generator->getGeometry();
-
+#ifndef NGROUPS
+  _NUM_GROUPS = _geometry->getNumEnergyGroups();
+#endif
 }
 
 
@@ -817,8 +866,14 @@ TransportSweep::~TransportSweep() {
 void TransportSweep::execute() {
 #pragma omp parallel
   {
-    MOCKernel* kernel = getKernel<SegmentationKernel>();
-    loopOverTracks(kernel);
+    // OTF ray tracing requires segmentation of tracks
+    if (_segment_formation != EXPLICIT_2D &&
+        _segment_formation != EXPLICIT_3D) {
+      MOCKernel* kernel = getKernel<SegmentationKernel>();
+      loopOverTracks(kernel);
+    }
+    else
+      loopOverTracks(NULL);
   }
 }
 
@@ -834,7 +889,7 @@ void TransportSweep::execute() {
  */
 void TransportSweep::onTrack(Track* track, segment* segments) {
 
-  /* Get the temporary FSR flux */
+  /* Get the thread number */
   int tid = omp_get_thread_num();
 
   /* Extract Track information */
@@ -844,11 +899,15 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
   int num_segments = track->getNumSegments();
   float* track_flux;
 
-  /* Extract the polar index if a 3D track */
+  /* Extract the polar index and quadrature weight if a 3D track */
   int polar_index = 0;
+  FP_PRECISION weight = 1;
   Track3D* track_3D = dynamic_cast<Track3D*>(track);
-  if (track_3D != NULL)
+  if (track_3D != NULL) {
     polar_index = track_3D->getPolarIndex();
+    weight = _track_generator->getQuadrature()->getWeightInline(azim_index,
+                                                                polar_index);
+  }
 
   /* Compute unit vector if necessary */
   FP_PRECISION direction[3];
@@ -876,17 +935,24 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
   }
 
   /* Allocate a temporary flux buffer on the stack (free) and initialize it */
+  /* Select right size for buffer */
 #ifndef NGROUPS
-  int _num_groups = _track_generator->getGeometry()->getNumEnergyGroups();
+  int _NUM_GROUPS = _cpu_solver->getNumEnergyGroups();
 #endif
-  int num_polar = 1;
-  if (track_3D == NULL)
-    num_polar = _track_generator->getQuadrature()->getNumPolarAngles() / 2;
+#ifndef LINEARSOURCE
+  int num_moments = 1;
+  if (_ls_solver != NULL)
+    num_moments = 4;
+#else
+  const int num_moments = 4;
+#endif
+  int num_groups_aligned = (_NUM_GROUPS / VEC_ALIGNMENT +
+                            (_NUM_GROUPS % VEC_ALIGNMENT != 0)) * VEC_ALIGNMENT;
 
-  int num_groups_aligned = (_num_groups / VEC_ALIGNMENT + 1) * VEC_ALIGNMENT;
-  FP_PRECISION fsr_flux[4 * num_groups_aligned * num_polar] __attribute__
+  /* Allocate an aligned buffer on the stack */
+  FP_PRECISION fsr_flux[num_moments * num_groups_aligned] __attribute__
        ((aligned (VEC_ALIGNMENT)));
-  memset(&fsr_flux[0], 0, 4 * num_groups_aligned * sizeof(FP_PRECISION));
+  memset(fsr_flux, 0, num_moments * num_groups_aligned * sizeof(FP_PRECISION));
   FP_PRECISION* fsr_flux_x = &fsr_flux[num_groups_aligned];
   FP_PRECISION* fsr_flux_y = &fsr_flux[2*num_groups_aligned];
   FP_PRECISION* fsr_flux_z = &fsr_flux[3*num_groups_aligned];
@@ -916,10 +982,10 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     if (s < num_segments - 1 && fsr_id != (&segments[s+1])->_region_id) {
 #ifndef LINEARSOURCE
       if (_ls_solver == NULL)
-        _cpu_solver->accumulateScalarFluxContribution(fsr_id, fsr_flux);
+        _cpu_solver->accumulateScalarFluxContribution(fsr_id, weight, fsr_flux);
       else
 #endif
-        _ls_solver->accumulateLinearFluxContribution(fsr_id, fsr_flux);
+        _ls_solver->accumulateLinearFluxContribution(fsr_id, weight, fsr_flux);
     }
 
     /* Tally the current for CMFD */
@@ -927,12 +993,14 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
                               track_flux, true);
   }
 
+#ifndef ONLYVACUUMBC
   /* Transfer boundary angular flux to outgoing Track */
   for (int i=0; i <= max_track_index; i++) {
     track_flux = _cpu_solver->getBoundaryFlux(track_id+i, true);
     _cpu_solver->transferBoundaryFlux(tracks_array[i], azim_index, polar_index,
                                       true, track_flux);
   }
+#endif
 
   /* Reverse the direction */
   for (int i=0; i<3; i++)
@@ -960,13 +1028,13 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
                                     fsr_flux_z, track_flux, direction);
 
     /* Accumulate contribution of segments to scalar flux before changing fsr */
-    if (s > 0 && fsr_id != (&segments[s-1])->_region_id) {
+    if (s == 0 || fsr_id != (&segments[s-1])->_region_id) {
 #ifndef LINEARSOURCE
       if (_ls_solver == NULL)
-        _cpu_solver->accumulateScalarFluxContribution(fsr_id, fsr_flux);
+        _cpu_solver->accumulateScalarFluxContribution(fsr_id, weight, fsr_flux);
       else
 #endif
-        _ls_solver->accumulateLinearFluxContribution(fsr_id, fsr_flux);
+        _ls_solver->accumulateLinearFluxContribution(fsr_id, weight, fsr_flux);
     }
 
     /* Tally the current for CMFD */
@@ -974,21 +1042,14 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
                               track_flux, false);
   }
 
-  /* Tally contribution for last segment */
-  long fsr_id = (&segments[0])->_region_id;
-#ifndef LINEARSOURCE
-  if (_ls_solver == NULL)
-    _cpu_solver->accumulateScalarFluxContribution(fsr_id, fsr_flux);
-  else
-#endif
-    _ls_solver->accumulateLinearFluxContribution(fsr_id, fsr_flux);
-
+#ifndef ONLYVACUUMBC
   /* Transfer boundary angular flux to outgoing Track */
   for (int i=0; i <= max_track_index; i++) {
     track_flux = _cpu_solver->getBoundaryFlux(track_id+i, false);
     _cpu_solver->transferBoundaryFlux(tracks_array[i], azim_index, polar_index,
                                       false, track_flux);
   }
+#endif
 }
 
 
@@ -1010,8 +1071,15 @@ DumpSegments::DumpSegments(TrackGenerator* track_generator)
  *          information to file.
  */
 void DumpSegments::execute() {
-  MOCKernel* kernel = getKernel<SegmentationKernel>();
-  loopOverTracks(kernel);
+
+  // OTF ray tracing requires segmentation of tracks
+  if (_segment_formation != EXPLICIT_2D &&
+      _segment_formation != EXPLICIT_3D) {
+    MOCKernel* kernel = getKernel<SegmentationKernel>();
+    loopOverTracks(kernel);
+  }
+  else
+    loopOverTracks(NULL);
 }
 
 
@@ -1100,7 +1168,7 @@ void ReadSegments::execute() {
 
 /**
  * @brief Sets the input file to read in tracking information.
- * @param in The input tracking file
+ * @param input the tracking file
  */
 void ReadSegments::setInputFile(FILE* input) {
   _in = input;
@@ -1147,27 +1215,27 @@ void ReadSegments::onTrack(Track* track, segment* segments) {
     ret = geometry->twiddleRead(&start_z, sizeof(double), 1, _in);
 
     /* Initialize segment with the data */
-    segment* curr_segment = new segment;
-    curr_segment->_length = length;
-    curr_segment->_material = materials[material_id];
-    curr_segment->_region_id = region_id;
-    curr_segment->_track_idx = track_idx;
-    curr_segment->_starting_position[0] = start_x;
-    curr_segment->_starting_position[1] = start_y;
-    curr_segment->_starting_position[2] = start_z;
+    segment curr_segment;
+    curr_segment._length = length;
+    curr_segment._material = materials[material_id];
+    curr_segment._region_id = region_id;
+    curr_segment._track_idx = track_idx;
+    curr_segment._starting_position[0] = start_x;
+    curr_segment._starting_position[1] = start_y;
+    curr_segment._starting_position[2] = start_z;
 
     /* Import CMFD-related data if needed */
     if (cmfd != NULL) {
       int cmfd_surface_fwd;
       ret = geometry->twiddleRead(&cmfd_surface_fwd, sizeof(int), 1, _in);
-      curr_segment->_cmfd_surface_fwd = cmfd_surface_fwd;
+      curr_segment._cmfd_surface_fwd = cmfd_surface_fwd;
       int cmfd_surface_bwd;
       ret = geometry->twiddleRead(&cmfd_surface_bwd, sizeof(int), 1, _in);
-      curr_segment->_cmfd_surface_bwd = cmfd_surface_bwd;
+      curr_segment._cmfd_surface_bwd = cmfd_surface_bwd;
     }
 
     /* Add this segment to the Track */
-    track->addSegment(curr_segment);
+    track->addSegment(&curr_segment);
   }
 }
 
@@ -1190,7 +1258,7 @@ TransportSweepOTF::TransportSweepOTF(TrackGenerator* track_generator)
 void TransportSweepOTF::execute() {
 #pragma omp parallel
   {
-    TransportKernel kernel(_track_generator, 0);
+    TransportKernel kernel(_track_generator);
     kernel.setCPUSolver(_cpu_solver);
     loopOverTracksByStackTwoWay(&kernel);
   }
@@ -1205,8 +1273,10 @@ void TransportSweepOTF::setCPUSolver(CPUSolver* cpu_solver) {
   _cpu_solver = cpu_solver;
 }
 
+
 /**
- * @brief NOT IMPLEMENTED
+ * @brief Placeholder, an onTrack routine is not required when performing
+ *        track generation and transport simultaneously.
  * @param track the Track of interest
  * @param segments array of segments on that track
  */
@@ -1232,8 +1302,14 @@ RecenterSegments::RecenterSegments(TrackGenerator* track_generator)
 void RecenterSegments::execute() {
 #pragma omp parallel
   {
-    MOCKernel* kernel = getKernel<SegmentationKernel>();
-    loopOverTracks(kernel);
+    // OTF ray tracing requires segmentation of tracks
+    if (_segment_formation != EXPLICIT_2D &&
+        _segment_formation != EXPLICIT_3D) {
+      MOCKernel* kernel = getKernel<SegmentationKernel>();
+      loopOverTracks(kernel);
+    }
+    else
+      loopOverTracks(NULL);
   }
 }
 
@@ -1276,8 +1352,15 @@ PrintSegments::PrintSegments(TrackGenerator* track_generator)
  //FIXME debug ?
  */
 void PrintSegments::execute() {
-  MOCKernel* kernel = getKernel<SegmentationKernel>();
-  loopOverTracks(kernel);
+
+  // OTF ray tracing requires segmentation of tracks
+  if (_segment_formation != EXPLICIT_2D &&
+      _segment_formation != EXPLICIT_3D) {
+    MOCKernel* kernel = getKernel<SegmentationKernel>();
+    loopOverTracks(kernel);
+  }
+  else
+    loopOverTracks(NULL);
 }
 
 

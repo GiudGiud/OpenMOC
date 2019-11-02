@@ -274,7 +274,7 @@ void set_log_level(const char* new_level) {
  * @brief Sets the minimum log message level which will be printed to the
  *        console and to the log file. This is an overloaded version to handle 
  *        a logLevel type input.
- * @param new_level the minimum logging level as an int(or enum type logLevel)
+ * @param new_level the minimum logging level as an int (or enum type logLevel)
  */
 void set_log_level(int new_level) {
   log_level = (logLevel)new_level;
@@ -328,7 +328,16 @@ void log_printf(logLevel level, const char* format, ...) {
     case (INFO):
       {
         std::string msg = std::string(message);
-        std::string level_prefix = "[  INFO   ]  ";
+        std::stringstream ss;
+#ifdef MPIx
+        if (rank < 10)
+          ss << "[  INFO " << rank << " ]  ";
+        else
+          ss << "[  INFO " << rank << "]  ";
+#else
+        ss << "[  INFO   ]  ";
+#endif
+        std::string level_prefix = ss.str();
 
         /* If message is too long for a line, split into many lines */
         if (int(msg.length()) > line_length)
@@ -381,7 +390,14 @@ void log_printf(logLevel level, const char* format, ...) {
 
         std::string msg = std::string(message);
         std::stringstream ss;
-        ss << "[  NODE " << rank << " ]  ";
+#ifdef MPIx
+        if (rank < 10)
+          ss << "[  NODE " << rank << " ]  ";
+        else
+          ss << "[  NODE " << rank << "]  ";
+#else
+        ss << "[  NORMAL ]  ";
+#endif
         std::string level_prefix = ss.str();
 
         /* If message is too long for a line, split into many lines */
@@ -569,7 +585,6 @@ void log_printf(logLevel level, const char* format, ...) {
     log_file.close();
 
     /* Write the log message to the shell */
-    //FIXME Too much output tends to segfault, locking output blocks test suite
     if (level == ERROR) {
       omp_set_lock(&log_error_lock);
 #ifdef MPIx
@@ -584,12 +599,15 @@ void log_printf(logLevel level, const char* format, ...) {
       throw std::logic_error(&msg_string[0]);
     }
     else {
+     //Note lock output in Python build for thread safety
+#ifdef SWIG
       omp_set_lock(&log_error_lock);
-      printf("%s", &msg_string[0]);
-#ifndef SWIG
-      fflush(stdout);
 #endif
+      printf("%s", &msg_string[0]);
+      fflush(stdout);
+#ifdef SWIG
       omp_unset_lock(&log_error_lock);
+#endif
     }
   }
 }

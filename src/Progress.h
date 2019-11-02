@@ -35,15 +35,15 @@ class Progress {
 private:
 
   std::string _name;
-  int _counter;
-  int _num_iterations;
+  long _counter;
+  long _num_iterations;
   int _curr_interval;
-  std::vector<int> _intervals;
+  std::vector<long> _intervals;
   Geometry* _geometry;
   bool _mpi_comm;
 
 public:
-  Progress(int num_iterations, std::string name, double interval=0.1,
+  Progress(long num_iterations, std::string name, double interval=0.1,
            Geometry* geometry=NULL, bool mpi_comm=false);
   virtual ~Progress();
 
