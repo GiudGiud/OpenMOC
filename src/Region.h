@@ -15,7 +15,7 @@
 #include <limits>
 #endif
 
- /* Forward declarations to resolve circular dependencies */
+/* Forward declarations to resolve circular dependencies */
 class Intersection;
 class Union;
 class Complement;
@@ -28,11 +28,11 @@ class Halfspace;
 enum regionType {
   /** The intersection of one or more regions */
   INTERSECTION,
-   /** The union of one or more regions */
+  /** The union of one or more regions */
   UNION,
-   /** The complement of a region */
+  /** The complement of a region */
   COMPLEMENT,
-   /** The side of a surface */
+  /** The side of a surface */
   HALFSPACE
 };
 
@@ -83,8 +83,8 @@ public:
   virtual boundaryType getMinZBoundaryType();
   virtual boundaryType getMaxZBoundaryType();
   virtual bool containsPoint(Point* point) =0;
-  virtual double minSurfaceDist(Point* point, double azim, double polar=M_PI_2);
   virtual double minSurfaceDist(LocalCoords* coords);
+  virtual double minSurfaceDist(Point* point, double azim, double polar=M_PI_2);
   virtual Region* clone();
 };
 
@@ -155,8 +155,8 @@ public:
   boundaryType getMinZBoundaryType();
   boundaryType getMaxZBoundaryType();
   bool containsPoint(Point* point);
-  double minSurfaceDist(Point* point, double azim, double polar=M_PI_2);
   double minSurfaceDist(LocalCoords* coords);
+  double minSurfaceDist(Point* point, double azim, double polar=M_PI_2);
 };
 
 /**

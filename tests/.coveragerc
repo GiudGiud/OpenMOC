@@ -1,8 +1,14 @@
 # .coveragerc to control coverage.py
+[run]
+source=openmoc, tests
 
 [report]
 # Files to exclude from coverage testing
-omit = openmoc/openmoc/openmoc.py
+omit =
+    tests/openmoc/openmoc/openmoc.py
+    openmoc/openmoc/openmoc.py
+    openmoc/openmoc.py
+    */openmc/*
 
 # Regexes for lines to exclude from consideration
 exclude_lines =

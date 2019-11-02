@@ -11,6 +11,9 @@
 /** Threshold to determine if a float equals to 0.0 */
 #define FLT_EPSILON 1.0E-12
 
+/** Threshold to determine if a flux is equal to 0.0 */
+#define FLUX_EPSILON FP_PRECISION(1.0E-25)
+
 /** Threshold to determine if a float is equal to infinity */
 #define FLT_INFINITY 1.0E300
 
@@ -78,12 +81,16 @@
 #define MAX_LINEAR_SOLVE_ITERATIONS 10000
 
 #ifdef MPIx
+#ifndef ONLYVACUUMBC
 #define TRACKS_PER_BUFFER 1000
+#else
+#define TRACKS_PER_BUFFER 10000
+#endif
 #define CMFD_BUFFER_SIZE 10000
 #endif
 
 #define LOCAL_COORDS_LEN 16
-#define MAX_VERSION_NUM 20
+#define MAX_VERSION_NUM 50
 
 /** The faces, edges, and vertices that collectively make up the surfaces of a
  *  rectangular prism. The edges denoted as "e" and vertices as "v" on the

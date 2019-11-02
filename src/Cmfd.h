@@ -121,6 +121,9 @@ private:
   /** Number of cells in z direction */
   int _num_z;
 
+  /** Sweep number on MOC side */
+  int _moc_iteration;
+
   /** Number of energy groups */
   int _num_moc_groups;
 
@@ -247,7 +250,10 @@ private:
   /** Whether to allow the CMFD solver to work with / return negative fluxes */
   bool _negative_fluxes_allowed;
 
-  /** Number of cells to used in updating MOC flux */
+  /** Number of MOC iterations before the CMFD update ratios are limited */
+  int _num_unbounded_iterations;
+
+  /** Number of cells to use in updating MOC flux */
   int _k_nearest;
 
   /** Relaxation factor to use for corrected diffusion coefficients */
@@ -345,7 +351,7 @@ private:
   /* Private worker functions */
   CMFD_PRECISION computeLarsensEDCFactor(CMFD_PRECISION dif_coef,
                                          CMFD_PRECISION delta);
-  void constructMatrices(int moc_iteration);
+  void constructMatrices();
   void collapseXS();
   void updateMOCFlux();
   void rescaleFlux();
@@ -370,8 +376,7 @@ private:
   double getDistanceToCentroid(Point* centroid, int cell_id, int local_cell_id,
                                int stencil_index);
   void getSurfaceDiffusionCoefficient(int cmfd_cell, int surface,
-        int group, int moc_iteration, CMFD_PRECISION& dif_surf,
-        CMFD_PRECISION& dif_surf_corr);
+        int group, CMFD_PRECISION& dif_surf, CMFD_PRECISION& dif_surf_corr);
   CMFD_PRECISION getDiffusionCoefficient(int cmfd_cell, int group);
   CMFD_PRECISION getSurfaceWidth(int surface, int global_ind);
   CMFD_PRECISION getPerpendicularSurfaceWidth(int surface, int global_ind);
@@ -387,7 +392,7 @@ private:
   void unpackSplitCurrents(bool faces);
   void copyFullSurfaceCurrents();
   void checkNeutronBalance(bool pre_split=true, bool old_source=false);
-  void printProlongationFactors(int iteration);
+  void printProlongationFactors();
 
 public:
 
@@ -413,6 +418,7 @@ public:
   void tallyStartingCurrent(Point* point, double delta_x, double delta_y,
                             double delta_z, float* track_flux, double weight);
   void recordNetCurrents();
+  void printInputParamsSummary();
   void printTimerReport();
   void checkBalance();
 
@@ -454,6 +460,7 @@ public:
   void setGroupStructure(std::vector< std::vector<int> > group_indices);
   void setSourceConvergenceThreshold(double source_thresh);
   void setQuadrature(Quadrature* quadrature);
+  void setNumUnboundedIterations(int unbounded_iterations);
   void setKNearest(int k_nearest);
   void setSolve3D(bool solve_3d);
   void setAzimSpacings(const std::vector<double>& azim_spacings,
@@ -519,11 +526,37 @@ inline int Cmfd::findCmfdSurfaceOTF(int cell_id, double z, int surface_2D) {
 
 
 /**
+ * @brief Converts a local CMFD cell ID into its global ID
+ * @param cmfd_cell The local CMFD cell ID
+ * @return The global CMFD cell ID
+ */
+inline int Cmfd::getGlobalCMFDCell(int cmfd_cell) {
+
+  int x_start = 0;
+  int y_start = 0;
+  int z_start = 0;
+  if (_domain_communicator != NULL) {
+    x_start = _accumulate_lmx[_domain_communicator->_domain_idx_x];
+    y_start = _accumulate_lmy[_domain_communicator->_domain_idx_y];
+    z_start = _accumulate_lmz[_domain_communicator->_domain_idx_z];
+  }
+
+  int ix = cmfd_cell % _local_num_x;
+  int iy = (cmfd_cell % (_local_num_x * _local_num_y)) / _local_num_x;
+  int iz = cmfd_cell / (_local_num_x * _local_num_y);
+
+  return ((iz + z_start) * _num_y + iy + y_start) * _num_x
+                + ix + x_start;
+}
+
+
+/**
  * @brief Tallies the current contribution from this segment across the
  *        the appropriate CMFD mesh cell surface.
  * @param curr_segment the current Track segment
  * @param track_flux the outgoing angular flux for this segment
- * @param polar_weights array of polar weights for some azimuthal angle
+ * @param azim_index azimuthal index of track angle
+ * @param polar_index polar index of track angle
  * @param fwd boolean indicating direction of integration along segment
  */
 inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
@@ -548,9 +581,9 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
   /* Tally current if necessary */
   if (tally_current) {
 
-    CMFD_PRECISION currents[_num_cmfd_groups] 
+    CMFD_PRECISION currents[_num_cmfd_groups]
          __attribute__ ((aligned(VEC_ALIGNMENT)));
-    memset(&currents[0], 0, _num_cmfd_groups * sizeof(CMFD_PRECISION));
+    memset(currents, 0, _num_cmfd_groups * sizeof(CMFD_PRECISION));
     int local_cell_id = getLocalCMFDCell(cell_id);
 
     if (_SOLVE_3D) {
@@ -584,6 +617,9 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
           _edge_corner_currents[first_ind+g] += currents[g];
 
         omp_unset_lock(&_edge_corner_lock);
+#ifdef INTEL
+#pragma omp flush
+#endif
       }
     }
     else {
@@ -616,7 +652,9 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
           _edge_corner_currents[first_ind+g] += currents[g];
 
         omp_unset_lock(&_edge_corner_lock);
-
+#ifdef INTEL
+#pragma omp flush
+#endif
       }
     }
   }

@@ -44,6 +44,7 @@ class CPULSSolver;
  */
 class MaxOpticalLength: public TraverseSegments {
 private:
+  FP_PRECISION _min_tau;
   FP_PRECISION _max_tau;
 
 public:
@@ -203,6 +204,7 @@ private:
   CPUSolver* _cpu_solver;
   CPULSSolver* _ls_solver;
   Geometry* _geometry;
+  int _num_groups;
   FP_PRECISION** _thread_fsr_fluxes;
   FP_PRECISION** _thread_scratch_pads;
 
@@ -328,7 +330,5 @@ public:
   void execute();
   void onTrack(Track* track, segment* segments);
 };
-
-
 
 #endif

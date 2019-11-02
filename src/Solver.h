@@ -187,6 +187,9 @@ protected:
   bool _SOLVE_3D;
 #endif
 
+  /** Whether the solver is using the direct or adjoint mode */
+  solverMode _solver_mode;
+
   /** Indicator of whether the flux array has been defined by the user */
   bool _is_restart;
 
@@ -315,6 +318,9 @@ protected:
   /** A string indicating the type of source approximation */
   std::string _source_type;
 
+  /** A boolean to know which type of solver is being used */
+  bool _gpu_solver;
+
   /**
    * @brief Initializes Track boundary angular flux and leakage and
    *        FSR scalar flux arrays.
@@ -329,8 +335,9 @@ protected:
   /* Initialize interp. tables, constants for computing source exponentials */
   virtual void initializeExpEvaluators();
 
-  /* Build fission matrices, transpose production for adjoint calculations */
-  void initializeMaterials(solverMode mode);
+  /* Build fission matrices, transpose production for adjoint calculations
+   * Must be virtual for the GPU solver to override this */
+  virtual void initializeMaterials(solverMode mode);
 
   virtual void initializeFSRs();
   void countFissionableFSRs();
@@ -453,7 +460,7 @@ public:
   Solver(TrackGenerator* track_generator=NULL);
   virtual ~Solver();
 
-  void setGeometry(Geometry* geometry);
+  virtual void setGeometry(Geometry* geometry);
 
   Geometry* getGeometry();
   TrackGenerator* getTrackGenerator();
@@ -480,11 +487,11 @@ public:
   void loadInitialFSRFluxes(std::string fname);
   void loadFSRFluxes(std::string fname, bool assign_k_eff=false, double tolerance=0.01);
 
-  double getFlux(long fsr_id, int group);
+  virtual double getFlux(long fsr_id, int group);
   virtual void getFluxes(FP_PRECISION* out_fluxes, int num_fluxes) = 0;
-  double getFSRSource(long fsr_id, int group);
+  virtual double getFSRSource(long fsr_id, int group);
 
-  void setTrackGenerator(TrackGenerator* track_generator);
+  virtual void setTrackGenerator(TrackGenerator* track_generator);
   void setConvergenceThreshold(double threshold);
   virtual void setFluxes(FP_PRECISION* in_fluxes, int num_fluxes) = 0;
   virtual void setFixedSourceByFSR(long fsr_id, int group, double source);
@@ -495,6 +502,7 @@ public:
   void setExpPrecision(double precision);
   void useExponentialInterpolation();
   void useExponentialIntrinsic();
+  void setSolverMode(solverMode solver_mode);
   void setRestartStatus(bool is_restart);
   void allowNegativeFluxes(bool negative_fluxes_on);
   void correctXS();
@@ -512,8 +520,11 @@ public:
                      residualType res_type=TOTAL_SOURCE);
   void computeEigenvalue(int max_iters=1000,
                          residualType res_type=FISSION_SOURCE);
+  void computeInitialFluxGuess(bool is_source_computation=false);
 
+#ifdef BGQ
   void printBGQMemory();
+#endif
 
  /**
   * @brief Computes the volume-weighted, energy integrated fission rate in
@@ -530,6 +541,7 @@ public:
   * @param fission_rates an array to store the fission rates (implicitly passed
   *                      in as a NumPy array from Python)
   * @param num_FSRs the number of FSRs passed in from Python
+  * @param nu whether to return nu-fission rates instead of fission rates
   */
   virtual void computeFSRFissionRates(double* fission_rates, long num_FSRs,
                                       bool nu = false) =0;
@@ -554,6 +566,12 @@ public:
                               int reset_iteration);
   void checkLimitXS(int iteration);
 
+#ifdef MPIx
+  /** Functions to check the MPI implemtation, accessible from Python */
+  virtual void printCycle(long track_start, int domain_start, int length)=0;
+  virtual void printLoadBalancingReport()=0;
+  virtual void boundaryFluxChecker()=0;
+#endif
 
   /**
    * @brief Activate On-The-Fly transport, to OTF ray-trace and propagate the
@@ -561,6 +579,15 @@ public:
    */
   inline void setOTFTransport() {
     _OTF_transport = true;
+    log_printf(NORMAL, "Using On-The-Fly transport");
+  }
+
+  /**
+   * @brief Return the number of energy groups
+   * @return the number of energy groups
+   */
+  inline int getNumEnergyGroups() {
+    return _num_groups;
   }
 
   /* Functions for equivalence */

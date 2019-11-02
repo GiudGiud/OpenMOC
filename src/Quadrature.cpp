@@ -416,7 +416,7 @@ void Quadrature::setThetas(const DoubleVec& thetas) {
                "with %d polar angles and %d azimuthal angles"
                " in each octant", thetas.size(), _num_polar/2,
                _num_azim/4);
-  log_printf(NORMAL, "Setting thetas");
+
   resize2D(_thetas, _num_azim/2, _num_polar);
 
   /* Extract sin thetas from user input */
@@ -1007,7 +1007,6 @@ void GLPolarQuad::setNumPolarAngles(size_t num_polar) {
  */
 void GLPolarQuad::initialize() {
 
-  log_printf(NORMAL, "Initial quad");
   /* Call parent class initialize routine */
   Quadrature::initialize();
 
@@ -1092,7 +1091,7 @@ double GLPolarQuad::legendrePolynomial(size_t n, double x) {
 
 /**
  * @brief The first logarithmic derivative of a Legendre polynomial
- * @param m the order of the polynomial
+ * @param n the order of the polynomial
  * @param x point at which to evaluate the logarithmic derivative
  * @return the value of the logarithmic derivative at x
  */
@@ -1105,7 +1104,7 @@ double GLPolarQuad::logDerivLegendre(size_t n, double x) {
 
 /**
  * @brief The second logarithmic derivative of a Legendre polynomial
- * @param m the order of the polynomial
+ * @param n the order of the polynomial
  * @param x point at which to evaluate the logarithmic derivative
  * @return the value of the logarithmic derivative at x
  */
@@ -1119,10 +1118,10 @@ double GLPolarQuad::secondLogDerivLegendre(size_t n, double x) {
 
 /**
  * @brief Finds the roots of Legendre polynomial of order n.
- * @detail Guesses for positive roots are set at logarithmic intervals.
- *         Positive roots are found simultaneously using an
- *         Alberth-Householder-n method. Each guess is successively nudged
- *         towards a true root. Only the positive roots are calculated
+ * @details Guesses for positive roots are set at logarithmic intervals.
+ *          Positive roots are found simultaneously using an
+ *          Alberth-Householder-n method. Each guess is successively nudged
+ *          towards a true root. Only the positive roots are calculated
  * @param n the order of the polynomial
  * @return a list of the roots of the polynomial
  */
@@ -1157,7 +1156,7 @@ DoubleVec GLPolarQuad::getLegendreRoots(size_t n) {
 
   bool all_roots_converged = false;
 
-  /* use the Alberth-Housholder_n method to nudge guesses towards roots */
+  /* use the Alberth-Householder_n method to nudge guesses towards roots */
   for (size_t iter=0; iter < MAX_LG_ITERS; ++iter) {
 
     /* set S tildes */

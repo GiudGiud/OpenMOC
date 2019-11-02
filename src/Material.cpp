@@ -31,9 +31,9 @@ void reset_material_id() {
  * @brief Maximize the auto-generated unique Material ID counter.
  * @details This method updates the auto-generated unique Material ID
  *          counter if the input parameter is greater than the present
- *          value. This is useful for the OpenCG compatibility module
+ *          value. This is useful for the OpenMC compatibility module
  *          to ensure that the auto-generated Material IDs do not
- *          collide with those created in OpenCG.
+ *          collide with those created in OpenMC.
  * @param material_id the id assigned to the auto-generated counter
  */
 void maximize_material_id(int material_id) {
@@ -224,7 +224,7 @@ FP_PRECISION* Material::getSigmaS() {
 
 
 /**
- * @brief Return the array of the Material's absorption cross-section matrix.
+ * @brief Return the array of the Material's absorption group cross-sections.
  * @return the pointer to the Material's array of absorption cross-sections
  */
 FP_PRECISION* Material::getSigmaA() {
@@ -233,20 +233,18 @@ FP_PRECISION* Material::getSigmaA() {
     log_printf(ERROR, "Unable to return Material %d's absorption "
                "cross-section since it has %d groups", _id, _num_groups);
 
-  if (_sigma_s == NULL || _sigma_t == NULL) {
-    log_printf(ERROR, "Unable to return Material %d's scattering "
+  if (_sigma_s == NULL || _sigma_t == NULL)
+    log_printf(ERROR, "Unable to return Material %d's absorption "
                "cross-section since scattering and total have not been set",
                _id);
-  }
 
   /* If not initialized, compute _sigma_a the absorption cross section */
   if (_sigma_a == NULL) {
     _sigma_a = new FP_PRECISION[_num_groups];
     for (int g=0; g < _num_groups; g++) {
       _sigma_a[g] = _sigma_t[g];
-      for (int gp=0; gp < _num_groups; gp++) {
+      for (int gp=0; gp < _num_groups; gp++)
         _sigma_a[g] -= _sigma_s[gp*_num_groups + g];
-      }
     }
   }
 
@@ -301,8 +299,7 @@ FP_PRECISION* Material::getChi() {
  */
 FP_PRECISION* Material::getFissionMatrix() {
   if (_fiss_matrix == NULL)
-    log_printf(ERROR, "Unable to return Material %d's fission matrix "
-               "since it has not yet been built", _id);
+    buildFissionMatrix();
 
   return _fiss_matrix;
 }
@@ -344,6 +341,36 @@ FP_PRECISION Material::getSigmaSByGroup(int origin, int destination) {
                origin, destination, _id, _num_groups);
 
   return _sigma_s[(destination-1)*_num_groups + (origin-1)];
+}
+
+
+/**
+ * @brief Get the Material's absorption cross section for some energy group.
+ * @param group the energy group
+ * @return the absorption cross section
+ */
+FP_PRECISION Material::getSigmaAByGroup(int group) {
+
+  if (group <= 0 || group > _num_groups)
+    log_printf(ERROR, "Unable to get sigma_a for group %d for Material "
+               "%d which contains %d energy groups", group, _id, _num_groups);
+
+  if (_sigma_s == NULL || _sigma_t == NULL)
+    log_printf(ERROR, "Unable to return Material %d's absorption "
+               "cross-section since scattering and total have not been set",
+               _id);
+
+  /* If not initialized, compute _sigma_a the absorption cross section */
+  if (_sigma_a == NULL) {
+    _sigma_a = new FP_PRECISION[_num_groups];
+    for (int g=0; g < _num_groups; g++) {
+      _sigma_a[g] = _sigma_t[g];
+      for (int gp=0; gp < _num_groups; gp++)
+        _sigma_a[g] -= _sigma_s[gp*_num_groups + g];
+    }
+  }
+
+  return _sigma_a[group-1];
 }
 
 
@@ -409,8 +436,7 @@ FP_PRECISION Material::getChiByGroup(int group) {
  */
 FP_PRECISION Material::getFissionMatrixByGroup(int origin, int destination) {
   if (_fiss_matrix == NULL)
-    log_printf(ERROR, "Unable to return Material %d's fission matrix "
-               "cross section since it has not yet been built", _id);
+    buildFissionMatrix();
 
   else if (origin <= 0 || destination <= 0 ||
            origin > _num_groups || destination > _num_groups)
@@ -610,8 +636,9 @@ void Material::setSigmaT(double* xs, int num_groups) {
 
     /* If the cross-section is near zero (e.g., within (-1E-10, 1E-10)) */
     if (fabs(xs[i]) < ZERO_SIGMA_T) {
-      log_printf(INFO, "Overriding zero total cross-section in "
-                 "group %d for Material %d with 1E-10", i + 1, _id);
+      log_printf(INFO_ONCE, "Overriding zero cross-section in "
+                 "group %d for Material %d with 1E-10", i, _id);
+
       _sigma_t[i] = FP_PRECISION(ZERO_SIGMA_T);
     }
     else
@@ -636,7 +663,7 @@ void Material::setSigmaTByGroup(double xs, int group) {
 
     /* If the cross-section is near zero (e.g., within (-1E-10, 1E-10)) */
     if (fabs(xs) < ZERO_SIGMA_T) {
-      log_printf(INFO, "Overriding zero total cross-section in "
+      log_printf(INFO_ONCE, "Overriding zero cross-section in "
                  "group %d for Material %d with 1E-10", group, _id);
       _sigma_t[group-1] = FP_PRECISION(ZERO_SIGMA_T);
     }
@@ -974,7 +1001,10 @@ void Material::alignData() {
     log_printf(ERROR, "Unable to align Material %d data since the "
                "cross-sections have not yet been set\n", _id);
 
-  _num_vector_groups = (_num_groups / VEC_LENGTH) + 1;
+  if (_fiss_matrix == NULL)
+    buildFissionMatrix();
+
+  _num_vector_groups = _num_groups / VEC_LENGTH + (_num_groups % VEC_LENGTH != 0);
 
   /* Allocate memory for the new aligned xs data */
   int size = _num_vector_groups * VEC_LENGTH * sizeof(FP_PRECISION);
@@ -984,6 +1014,7 @@ void Material::alignData() {
   FP_PRECISION* new_sigma_f = (FP_PRECISION*)MM_MALLOC(size, VEC_ALIGNMENT);
   FP_PRECISION* new_nu_sigma_f=(FP_PRECISION*)MM_MALLOC(size, VEC_ALIGNMENT);
   FP_PRECISION* new_chi = (FP_PRECISION*)MM_MALLOC(size, VEC_ALIGNMENT);
+  //FIXME Sigma_a is not copied
 
   /* The fission and scattering matrices will be the number of vector
    * groups wide (SIMD) and the actual number of groups long since
@@ -1091,6 +1122,8 @@ Material* Material::clone() {
     clone->setSigmaFByGroup((double)_sigma_f[i], i+1);
     clone->setNuSigmaFByGroup((double)_nu_sigma_f[i], i+1);
     clone->setChiByGroup((double)_chi[i], i+1);
+    if (_sigma_a != NULL)
+      clone->setSigmaAByGroup((double)_sigma_a[i], i+1);
 
     for (int j=0; j < _num_groups; j++)
       clone->setSigmaSByGroup((double)getSigmaSByGroup(i+1,j+1), i+1, j+1);

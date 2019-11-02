@@ -8,8 +8,9 @@
 
 #include "../DeviceMaterial.h"
 #include "../DeviceTrack.h"
+#include "GPUQuery.h"
 #include <map>
 
 void clone_material(Material* material_h, dev_material* material_d);
-void clone_track(Track* track_h, dev_track* track_d, 
+void clone_track(Track* track_h, dev_track* track_d,
                         std::map<int, int> &material_IDs_to_indices);

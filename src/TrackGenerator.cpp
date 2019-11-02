@@ -6,7 +6,7 @@
  * @brief Constructor for the TrackGenerator assigns default values.
  * @param geometry a pointer to a Geometry object
  * @param num_azim number of azimuthal angles in \f$ [0, 2\pi] \f$
- * @param spacing track spacing (cm)
+ * @param azim_spacing azimuthal track spacing (cm)
  */
 TrackGenerator::TrackGenerator(Geometry* geometry, int num_azim,
                                double azim_spacing) {
@@ -143,6 +143,15 @@ void TrackGenerator::initializeVolumes() {
   initializeFSRVolumesBuffer();
   FP_PRECISION* fsr_volumes = getFSRVolumes();
 
+  /* Reset cell and material volumes */
+  for (int i=0; i < num_FSRs; i++) {
+    cell = _geometry->findCellContainingFSR(i);
+    cell->setVolume(0);
+
+    material = cell->getFillMaterial();
+    material->setVolume(0);
+  }
+
   /* Compute volume and number of instances for each Cell and Material */
   for (int i=0; i < num_FSRs; i++) {
     cell = _geometry->findCellContainingFSR(i);
@@ -221,7 +230,7 @@ long TrackGenerator::getNumSegments() {
  */
 long TrackGenerator::getNum2DSegments() {
 
-  if (!TrackGenerator::containsSegments())
+  if (!containsSegments())
     log_printf(ERROR, "Cannot get the number of 2D segments since they "
                "have not been generated.");
 
@@ -387,7 +396,7 @@ FP_PRECISION* TrackGenerator::getFSRVolumes() {
   double total_volume = 0;
   for (long r=0; r < num_FSRs; r++)
     total_volume += _FSR_volumes[r];
-  log_printf(DEBUG, "Total volume %f cm3.", total_volume);
+  log_printf(DEBUG, "Total volume %f cm3", total_volume);
 
   return _FSR_volumes;
 }
@@ -469,6 +478,7 @@ void TrackGenerator::setNumThreads(int num_threads) {
       cpus.push_back(sched_getcpu());
     }
   }
+  sort(cpus.begin(), cpus.end());
 
   std::stringstream str_cpus;
   for (int i=0; i<cpus.size(); i++)
@@ -482,7 +492,7 @@ void TrackGenerator::setNumThreads(int num_threads) {
 #endif
 
   if (num_threads > 1)
-    log_printf(NODAL, "CPUs on rank %d process: %s", rank, 
+    log_printf(NODAL, "CPUs on rank %d process: %s", rank,
                str_cpus.str().c_str());
 }
 
@@ -542,6 +552,10 @@ void TrackGenerator::setGeometry(Geometry* geometry) {
  */
 void TrackGenerator::setZCoord(double z_coord) {
   _z_coord = z_coord;
+
+  /* Move the CMFD lattice near the plane of interest */
+  if (_geometry->getCmfd() != NULL)
+    _geometry->getCmfd()->getLattice()->getOffset()->setZ(z_coord - 0.5);
 }
 
 
@@ -577,7 +591,7 @@ bool TrackGenerator::containsSegments() {
 
 
 /**
- * @brief Fills an array with the x,y coordinates for each Track.
+ * @brief Fills an array with the x,y,z coordinates for each Track.
  * @details This class method is intended to be called by the OpenMOC
  *          Python "plotter" module as a utility to assist in plotting
  *          tracks. Although this method appears to require two arguments,
@@ -589,7 +603,7 @@ bool TrackGenerator::containsSegments() {
  *          coords = track_generator.retrieveTrackCoords(num_tracks*4)
  * @endcode
  *
- * @param coords an array of coords of length 4 times the number of Tracks
+ * @param coords an array of coords of length 6 times the number of Tracks
  * @param num_tracks the total number of Tracks
  */
 void TrackGenerator::retrieveTrackCoords(double* coords, long num_tracks) {
@@ -598,7 +612,7 @@ void TrackGenerator::retrieveTrackCoords(double* coords, long num_tracks) {
 
 
 /**
- * @brief Fills an array with the x,y coordinates for each Track.
+ * @brief Fills an array with the x,y,z coordinates for each Track.
  * @details This class method is intended to be called by the OpenMOC
  *          Python "plotter" module as a utility to assist in plotting
  *          tracks. Although this method appears to require two arguments,
@@ -610,7 +624,7 @@ void TrackGenerator::retrieveTrackCoords(double* coords, long num_tracks) {
  *          coords = track_generator.retrieve2DTrackCoords(num_tracks*4)
  * @endcode
  *
- * @param coords an array of coords of length 4 times the number of Tracks
+ * @param coords an array of coords of length 6 times the number of Tracks
  * @param num_tracks the total number of Tracks
  */
 void TrackGenerator::retrieve2DTrackCoords(double* coords, long num_tracks) {
@@ -632,6 +646,7 @@ void TrackGenerator::retrieve2DTrackCoords(double* coords, long num_tracks) {
       coords[counter+3] = _tracks_2D[a][i].getEnd()->getX();
       coords[counter+4] = _tracks_2D[a][i].getEnd()->getY();
       coords[counter+5] = _tracks_2D[a][i].getEnd()->getZ();
+      //NOTE The Z-coordinate is constant
 
       counter += NUM_VALUES_PER_RETRIEVED_TRACK;
     }
@@ -640,7 +655,7 @@ void TrackGenerator::retrieve2DTrackCoords(double* coords, long num_tracks) {
 
 
 /**
- * @brief Fills an array with the x,y coordinates for each Track segment.
+ * @brief Fills an array with the x,y,z coordinates for each Track segment.
  * @details This class method is intended to be called by the OpenMOC
  *          Python "plotter" module as a utility to assist in plotting
  *          segments. Although this method appears to require two arguments,
@@ -652,7 +667,7 @@ void TrackGenerator::retrieve2DTrackCoords(double* coords, long num_tracks) {
  *          coords = track_generator.retrieveSegmentCoords(num_segments*5)
  * @endcode
  *
- * @param coords an array of coords of length 5 times the number of segments
+ * @param coords an array of coords of length 7 times the number of segments
  * @param num_segments the total number of Track segments
  */
 void TrackGenerator::retrieveSegmentCoords(double* coords, long num_segments) {
@@ -661,7 +676,7 @@ void TrackGenerator::retrieveSegmentCoords(double* coords, long num_segments) {
 
 
 /**
- * @brief Fills an array with the x,y coordinates for each Track segment.
+ * @brief Fills an array with the x,y,z coordinates for each Track segment.
  * @details This class method is intended to be called by the OpenMOC
  *          Python "plotter" module as a utility to assist in plotting
  *          segments. Although this method appears to require two arguments,
@@ -673,7 +688,7 @@ void TrackGenerator::retrieveSegmentCoords(double* coords, long num_segments) {
  *          coords = track_generator.retrieve2DSegmentCoords(num_segments*5)
  * @endcode
  *
- * @param coords an array of coords of length 5 times the number of segments
+ * @param coords an array of coords of length 7 times the number of segments
  * @param num_segments the total number of Track segments
  */
 void TrackGenerator::retrieve2DSegmentCoords(double* coords, long num_segments) {
@@ -814,7 +829,8 @@ void TrackGenerator::generateTracks() {
     initializeTracks();
 
     /* Initialize the track file directory and read in tracks if they exist */
-    initializeTrackFileDirectory();
+    //NOTE Useful for 2D simulations, currently broken
+    //initializeTrackFileDirectory();
 
     /* If track file not present, generate segments */
     if (_use_input_file == false) {
@@ -884,8 +900,8 @@ void TrackGenerator::initializeDefaultQuadrature() {
 
 /**
  * @brief Calculates the least common multiple of two numbers a and b
- * @param first number a
- * @param second number b (order does not matter)
+ * @param a first number
+ * @param b second number (order does not matter)
  * @return the least common multiple of a and b
  */
 double TrackGenerator::leastCommonMultiple(double a, double b) {
@@ -1216,48 +1232,83 @@ void TrackGenerator::segmentize() {
   /* Check to ensure the Geometry is infinite in axial direction */
   double max_z = _geometry->getRootUniverse()->getMaxZ();
   double min_z = _geometry->getRootUniverse()->getMinZ();
-  if ((max_z - min_z) < FLT_INFINITY) {
-    log_printf(WARNING_ONCE, "The Geometry was set with non-inifinite "
+  if (max_z - min_z < FLT_INFINITY) {
+    log_printf(WARNING_ONCE, "The Geometry was set with non-infinite "
                "z-boundaries and supplied to a 2D TrackGenerator. The min-z "
                "boundary was set to %5.2f and the max-z boundary was set to "
                "%5.2f. Z-boundaries are assumed to be infinite in 2D "
                "TrackGenerators.", min_z, max_z);
 
-    Cmfd* cmfd = _geometry->getCmfd();
-    if (cmfd != NULL) {
+#ifdef MPIx
+    /* Check that the geometry is not domain decomposed in Z */
+    int domains_xyz[3];
+    _geometry->getDomainStructure(domains_xyz);
+    if (domains_xyz[2] > 1)
+      log_printf(ERROR, "A geometry with an axial domain domain decomposition "
+                 "has been supplied to a 2D ray tracer.");
+#endif
 
-      /* Check that CMFD has been initialized */
-      if (cmfd->getLattice() == NULL)
-        log_printf(ERROR, "CMFD has not been initialized before generating "
-                   "tracks. A call to geometry.initializeFlatSourceRegions() "
-                   "may be missing.");
-
-      /* Re-initialize CMFD lattice with 2D dimensions */
-      Point offset;
-      offset.setX(cmfd->getLattice()->getOffset()->getX());
-      offset.setY(cmfd->getLattice()->getOffset()->getY());
-      offset.setZ(_z_coord);
-      cmfd->initializeLattice(&offset, true);
+    /* Check that the track generator is ray tracing within bounds */
+    if (_z_coord < min_z || _z_coord > max_z) {
+      log_printf(WARNING_ONCE, "The track generator z-coordinate (%.2e cm) "
+                 "lies outside the geometry bounds [%.2e %.2e] cm. Z"
+                 "-coordinate moved to %.2e cm", _z_coord, min_z, max_z,
+                 (min_z + max_z) / 2);
+      _z_coord = (min_z + max_z) / 2;
     }
   }
 
-  int tracks_segmented = 0;
-  long num_2D_tracks = getNum2DTracks();
+#ifdef MPIx
+  /* If domain decomposed, add artificial infinite Z bounds */
+  if (_geometry->isDomainDecomposed()) {
+    ZPlane* min_z_plane = new ZPlane(-FLT_INFINITY);
+    ZPlane* max_z_plane = new ZPlane(+FLT_INFINITY);
+    min_z_plane->setBoundaryType(REFLECTIVE);
+    max_z_plane->setBoundaryType(REFLECTIVE);
+
+    std::map<int, Cell*>::iterator cell;
+    std::map<int, Cell*> cells = _geometry->getRootUniverse()->getCells();
+    for (cell = cells.begin(); cell != cells.end(); ++cell) {
+      (cell->second)->addSurface(+1, min_z_plane);
+      (cell->second)->addSurface(-1, max_z_plane);
+    }
+    _geometry->getRootUniverse()->calculateBoundaries();
+  }
+#endif
+
+  /* Make sure CMFD lattice is initialized and has right offset for 2D */
+  Cmfd* cmfd = _geometry->getCmfd();
+  if (cmfd != NULL) {
+
+    /* Check that CMFD has been initialized */
+    if (cmfd->getLattice() == NULL)
+      log_printf(ERROR, "CMFD has not been initialized before generating "
+                 "tracks. A call to geometry.initializeFlatSourceRegions() "
+                 "may be missing.");
+
+    /* Re-initialize CMFD lattice with 2D dimensions */
+    Point offset;
+    offset.setX(cmfd->getLattice()->getOffset()->getX());
+    offset.setY(cmfd->getLattice()->getOffset()->getY());
+    offset.setZ(_z_coord);
+    cmfd->initializeLattice(&offset, true);
+  }
+
+  std::string msg = "Segmenting 2D tracks";
+  Progress progress(_num_2D_tracks, msg, 0.1, _geometry, true);
 
   /* Loop over all Tracks */
-  for (int a=0; a < _num_azim/2; a++) {
-    log_printf(NORMAL, "segmenting 2D tracks - Percent complete: %5.2f %%",
-               double(tracks_segmented) / num_2D_tracks * 100.0);
-#pragma omp parallel for
-    for (int i=0; i < _num_x[a] + _num_y[a]; i++) {
-      _geometry->segmentize2D(&_tracks_2D[a][i], _z_coord);
-    }
-
-    tracks_segmented += _num_x[a] + _num_y[a];
+#pragma omp parallel for schedule(dynamic)
+  for (int t=0; t < _num_2D_tracks; t++) {
+    _geometry->segmentize2D(_tracks_2D_array[t], _z_coord);
+    progress.incrementCounter();
   }
 
   _geometry->initializeFSRVectors();
   _contains_2D_segments = true;
+
+  /* Output memory consumption of explicit ray tracing */
+  printMemoryReport();
 }
 
 
@@ -1348,6 +1399,9 @@ void TrackGenerator::dumpSegmentsToFile() {
 
   FILE* out;
   out = fopen(_tracks_filename.c_str(), "w");
+  if (out == NULL)
+    log_printf(ERROR, "Segments file %s could not be written.",
+               &_tracks_filename[0]);
 
   /* Get a string representation of the Geometry's attributes. This is used to
    * check whether or not ray tracing has been performed for this Geometry */
@@ -1447,7 +1501,7 @@ void TrackGenerator::dumpSegmentsToFile() {
 
 
 /**
- * @brief Write information of all Extruded FSRs to a file 
+ * @brief Write information of all Extruded FSRs to a file
  //TODO Use implementation in 3D track generator
  * @param out file to write to
  */
@@ -1464,6 +1518,9 @@ bool TrackGenerator::readSegmentsFromFile() {
 
   int ret;
   FILE* in = fopen(_tracks_filename.c_str(), "r");
+  if (in == NULL)
+    log_printf(ERROR, "Segments file %s could not be found.",
+               &_tracks_filename[0]);
 
   int string_length;
 
@@ -1651,21 +1708,29 @@ void TrackGenerator::generateFSRCentroids(FP_PRECISION* FSR_volumes) {
 
   /* Print FSR volumes, centroids and volume moments for debugging purposes */
   double total_volume[4];
-  memset(&total_volume[0], 0, 4 * sizeof(double));
+  memset(total_volume, 0, 4 * sizeof(double));
+  FP_PRECISION min_volume = 1e10;
+  FP_PRECISION max_volume = 0.;
+
   for (long r=0; r < num_FSRs; r++) {
     total_volume[0] += _FSR_volumes[r];
     total_volume[1] += _FSR_volumes[r] * centroids[r]->getX();
     total_volume[2] += _FSR_volumes[r] * centroids[r]->getY();
     total_volume[3] += _FSR_volumes[r] * centroids[r]->getZ();
 
-    log_printf(DEBUG, "FSR ID = %d has volume = %f, centroid"
-               " (%f %f %f)", r, _FSR_volumes[r], centroids[r]->getX(),
+    min_volume = std::min(_FSR_volumes[r], min_volume);
+    max_volume = std::max(_FSR_volumes[r], max_volume);
+
+    log_printf(DEBUG, "FSR ID = %d has volume = %.6f, centroid"
+               " (%.3f %.3f %.3f)", r, _FSR_volumes[r], centroids[r]->getX(),
                centroids[r]->getY(), centroids[r]->getZ());
   }
 
-  log_printf(DEBUG, "Total volume %f cm3, moments of volume (%f %f %f).",
-             total_volume[0], total_volume[1], total_volume[2],
-             total_volume[3]);
+  log_printf(DEBUG, "Total volume %.6f cm3, moments of volume "
+             "(%.4e %.4e %.4e).", total_volume[0], total_volume[1],
+             total_volume[2], total_volume[3]);
+  log_printf(DEBUG, "Average / min / max volumes of FSRs : %.2e / %.2e / %.2e",
+             total_volume[0] / num_FSRs, min_volume, max_volume);
   delete [] centroids;
 }
 
@@ -1708,9 +1773,6 @@ FP_PRECISION TrackGenerator::retrieveMaxOpticalLength() {
  *          to fit the calculated maximum number of segments per Track.
  */
 void TrackGenerator::countSegments() {
-
-  std::string msg = "Counting segments";
-  Progress progress(_num_2D_tracks, msg);
 
   /* Count the number of segments on each track and update the maximum */
   SegmentCounter counter(this);
@@ -1766,7 +1828,7 @@ bool TrackGenerator::getPeriodic() {
 
 /**
  * @brief Sets a flag to record all segment information in the tracking file.
- * @param dump_segments whether or not to record segment information in the 
+ * @param dump_segments whether or not to record segment information in the
  *        tracking file: true to record, false not to record
  */
 void TrackGenerator::setDumpSegments(bool dump_segments) {
@@ -1826,4 +1888,27 @@ void TrackGenerator::printTimerReport(bool mpi_reduce) {
   std::string msg_string = "Total Track Generation & Segmentation Time";
   msg_string.resize(53, '.');
   log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), gen_time);
+}
+
+
+/**
+ * @brief Print the track generation memory report.
+ */
+void TrackGenerator::printMemoryReport() {
+
+  long track_storage = _num_2D_tracks * sizeof(Track);
+  long segment_storage = getNum2DSegments() * sizeof(segment);
+  long max_segment_storage = segment_storage;
+
+#ifdef MPIx
+  if (_geometry->isDomainDecomposed())
+    MPI_Allreduce(&segment_storage, &max_segment_storage, 1, MPI_LONG, MPI_MAX,
+                  _geometry->getMPICart());
+    /* NOTE: Same tracks on every domain */
+#endif
+
+  log_printf(INFO_ONCE, "Max 2D explicit track storage per domain %.2f MB",
+             track_storage / float(1e6));
+  log_printf(INFO_ONCE, "Max 2D explicit segment storage per domain %.2f MB",
+             max_segment_storage / float(1e6));
 }

@@ -15,6 +15,7 @@
  * @param A the loss + streaming Matrix object
  * @param M the fission gain Matrix object
  * @param X the flux Vector object
+ * @param k_eff initial k_effective
  * @param tol the power method and linear solve source convergence threshold
  * @param SOR_factor the successive over-relaxation factor
  * @param convergence_data a summary of how to solver converged
@@ -210,7 +211,6 @@ bool linearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
                B->getNumGroups(), X->getNumGroups());
 
   /* Initialize variables */
-  bool reset = false;
   double residual;
   double min_residual = 1e6;
   int iter = 0;
@@ -220,8 +220,8 @@ bool linearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
   int num_z = X->getNumZ();
   int num_groups = X->getNumGroups();
   int num_rows = X->getNumRows();
-  Vector X_old(cell_locks, num_x, num_y, num_z, num_groups);
-  CMFD_PRECISION* x_old = X_old.getArray();
+  //Vector X_old(cell_locks, num_x, num_y, num_z, num_groups);  //FIXME delete
+  //CMFD_PRECISION* x_old = X_old.getArray();
   int* IA = A->getIA();
   int* JA = A->getJA();
   CMFD_PRECISION* DIAG = A->getDiag();
@@ -244,7 +244,7 @@ bool linearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
   while (iter < MAX_LINEAR_SOLVE_ITERATIONS) {
 
     /* Pass new flux to old flux */
-    X->copyTo(&X_old);
+    //X->copyTo(&X_old);
 
     // Iteration over red/black cells
     for (int color = 0; color < 2; color++) {
@@ -253,6 +253,7 @@ bool linearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
       getCouplingTerms(comm, color, coupling_sizes, coupling_indexes,
                        coupling_coeffs, coupling_fluxes, x, offset);
 #endif
+
 #pragma omp parallel for collapse(2)
       for (int iz=0; iz < num_z; iz++) {
         for (int iy=0; iy < num_y; iy++) {
@@ -260,6 +261,13 @@ bool linearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
 
             int cell = (iz*num_y + iy)*num_x + ix;
             int row_start = cell*num_groups;
+
+            /* Find index into communicator buffers for cells on surfaces */
+            bool on_surface = (iz==0) || (iz==num_z-1) || (iy==0) || (iy==num_y-1)
+                 || (ix==0) || (ix==num_x-1);
+            int domain_surface_index = -1;
+            if (comm != NULL && on_surface)
+              domain_surface_index = comm->mapLocalToSurface[cell];
 
             /* Contribution of off-diagonal terms, hard to SIMD vectorize */
             for (int g=0; g < num_groups; g++) {
@@ -281,17 +289,18 @@ bool linearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
                 else
                   x[row] += b[row];
               }
-
+#ifdef MPIx
               // Contribution of off node fluxes
-              if (comm != NULL) {
-                for (int i = 0; i < coupling_sizes[row]; i++) {
-                  int idx = coupling_indexes[row][i] * num_groups + g;
-                  int domain = comm->domains[color][row][i];
+              if (comm != NULL && on_surface) {
+                int row_surf = domain_surface_index * num_groups + g;
+                for (int i = 0; i < coupling_sizes[row_surf]; i++) {
+                  int idx = coupling_indexes[row_surf][i] * num_groups + g;
+                  int domain = comm->domains[color][row_surf][i];
                   CMFD_PRECISION flux = coupling_fluxes[domain][idx];
-                  x[row] -= coupling_coeffs[row][i] * flux;
+                  x[row] -= coupling_coeffs[row_surf][i] * flux;
                 }
               }
-
+#endif
               // Perform these operations separately, for performance
               x[row] *= (SOR_factor / DIAG[row]);
             }
@@ -303,47 +312,58 @@ bool linearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
     // Compute the new source
     matrixMultiplication(M, X, &new_source);
 
-    // Compute the residual
+    // Compute the initial residual
     feclearexcept (FE_ALL_EXCEPT);
-    residual = computeRMSE(&new_source, &old_source, true, comm);
     if (iter == 0) {
+      residual = computeRMSE(&new_source, &old_source, true, comm);
       if (convergence_data != NULL)
         convergence_data->linear_res_end = residual;
       initial_residual = residual;
     }
 
-    // Record current minimum residual
-    if (residual < min_residual)
-      min_residual = residual;
-
-    // Check for going off the rails
-    int raised = fetestexcept (FE_INVALID);
-    if ((residual > 1e3 * min_residual && min_residual > 1e-10) || raised) {
-      log_printf(WARNING, "linear solve divergent : res %f", residual);
-      if (convergence_data != NULL)
-        convergence_data->linear_iters_end = iter;
-      return false;
-    }
-
-    // Copy the new source to the old source
-    new_source.copyTo(&old_source);
-
     // Increment the interations counter
     iter++;
 
+    double ratio_residuals = 1;
+    if (initial_residual > 0)
+      ratio_residuals = residual / initial_residual;
     log_printf(DEBUG, "SOR iter: %d, residual: %3.2e, initial residual: %3.2e"
                ", ratio = %3.2e, tolerance: %3.2e, end? %d", iter, residual,
-               initial_residual, residual / initial_residual, tol,
-               (residual / initial_residual < 0.1 || residual < tol) &&
+               initial_residual, ratio_residuals, tol,
+               (ratio_residuals < 0.1 || residual < tol) &&
                iter > MIN_LINEAR_SOLVE_ITERATIONS);
 
-    // Check for convergence
-    if ((residual / initial_residual < 0.1 || residual < tol) &&
-        iter > MIN_LINEAR_SOLVE_ITERATIONS) {
-      if (convergence_data != NULL)
-        convergence_data->linear_iters_end = iter;
-      break;
+    // Compute residual only after minimum iteration number
+    if (iter > MIN_LINEAR_SOLVE_ITERATIONS) {
+
+      residual = computeRMSE(&new_source, &old_source, true, comm);
+
+      // Record current minimum residual
+      if (residual < min_residual)
+        min_residual = residual;
+
+      // Check for going off the rails
+      int raised = fetestexcept (FE_INVALID);
+      if ((residual > 1e3 * min_residual && min_residual > 1e-10) || raised) {
+        log_printf(WARNING, "linear solve divergent : res %e min_res %e NaN? %d",
+                   residual, min_residual, raised);
+        if (convergence_data != NULL)
+          convergence_data->linear_iters_end = iter;
+        success = false;
+        break;
+      }
+
+      // Check for convergence
+      if (residual / initial_residual < 0.1 || residual < tol) {
+        if (convergence_data != NULL)
+          convergence_data->linear_iters_end = iter;
+        break;
+      }
     }
+
+    // Copy the new source to the old source
+    if (iter > MIN_LINEAR_SOLVE_ITERATIONS - 1)
+      new_source.copyTo(&old_source);
   }
 
   log_printf(DEBUG, "linear solve iterations: %d", iter);
@@ -363,7 +383,7 @@ bool linearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
 }
 
 
-
+#ifdef MPIx
 /**
  * @brief Get coupling fluxes and other information from neighbors. 
  *        The information are transfered by reference.
@@ -379,7 +399,6 @@ bool linearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
  * @param offset Sum of the starting CMFD global indexes of a domain, for 
  *        calculation of the color
  */
-#ifdef MPIx
 void getCouplingTerms(DomainCommunicator* comm, int color, int*& coupling_sizes,
                       int**& coupling_indexes, CMFD_PRECISION**& coupling_coeffs,
                       CMFD_PRECISION**& coupling_fluxes,
@@ -426,7 +445,7 @@ void getCouplingTerms(DomainCommunicator* comm, int color, int*& coupling_sizes,
             for (int j=0; j < ny; j++)
               for (int g=0; g < ng; g++)
                 comm->buffer[surf][ng*(i*ny+j)+g] =
-                  curr_fluxes[ng*((i*ny + j)*nx)+g];
+                  curr_fluxes[ng*((i*ny + j)*nx) + g];
         }
         else if (surf == SURFACE_X_MAX) {
           size = ny * nz * ng;
@@ -434,7 +453,7 @@ void getCouplingTerms(DomainCommunicator* comm, int color, int*& coupling_sizes,
             for (int j=0; j < ny; j++)
               for (int g=0; g < ng; g++)
                 comm->buffer[surf][ng*(i*ny+j)+g] =
-                  curr_fluxes[ng*((i*ny + j)*nx + nx-1)+g];
+                  curr_fluxes[ng*((i*ny + j)*nx + nx-1) + g];
         }
         else if (surf == SURFACE_Y_MIN) {
           size = nx * nz * ng;
@@ -442,7 +461,7 @@ void getCouplingTerms(DomainCommunicator* comm, int color, int*& coupling_sizes,
             for (int j=0; j < nx; j++)
               for (int g=0; g < ng; g++)
                 comm->buffer[surf][ng*(i*nx+j)+g] =
-                  curr_fluxes[ng*(i*nx*ny + j)+g];
+                  curr_fluxes[ng*(i*nx*ny + j) + g];
         }
         else if (surf == SURFACE_Y_MAX) {
           size = nx * nz * ng;
@@ -450,7 +469,7 @@ void getCouplingTerms(DomainCommunicator* comm, int color, int*& coupling_sizes,
             for (int j=0; j < nx; j++)
               for (int g=0; g < ng; g++)
                 comm->buffer[surf][ng*(i*nx+j)+g] =
-                  curr_fluxes[ng*(i*nx*ny + j + nx*(ny-1))+g];
+                  curr_fluxes[ng*(i*nx*ny + j + nx*(ny-1)) + g];
         }
         else if (surf == SURFACE_Z_MIN) {
           size = nx * ny * ng;
@@ -466,7 +485,7 @@ void getCouplingTerms(DomainCommunicator* comm, int color, int*& coupling_sizes,
             for (int j=0; j < nx; j++)
               for (int g=0; g < ng; g++)
                 comm->buffer[surf][ng*(i*nx+j)+g] =
-                  curr_fluxes[ng*(i*nx + j + nx*ny*(nz-1))+g];
+                  curr_fluxes[ng*(i*nx + j + nx*ny*(nz-1)) + g];
         }
 
         sizes[surf] = size;
@@ -502,6 +521,7 @@ void getCouplingTerms(DomainCommunicator* comm, int color, int*& coupling_sizes,
           if (flag == 0)
             round_complete = false;
           else
+            // Copy received data into coupling_fluxes
             for (int i=0; i < sizes[surf]; i++)
               coupling_fluxes[surf][i] = comm->buffer[surf][sizes[surf]+i];
         }
@@ -583,7 +603,7 @@ double computeRMSE(Vector* X, Vector* Y, bool integrated,
                Y->getNumX(), Y->getNumY(), Y->getNumZ(), Y->getNumGroups());
 
   double rmse;
-  double sum_residuals;
+  double sum_residuals = 0;
   int norm;
   int num_x = X->getNumX();
   int num_y = X->getNumY();
@@ -594,32 +614,41 @@ double computeRMSE(Vector* X, Vector* Y, bool integrated,
   if (integrated) {
 
     double new_source, old_source;
-    Vector residual(cell_locks, num_x, num_y, num_z, 1);
+    CMFD_PRECISION residual[num_x * num_y * num_z]
+         __attribute__ ((aligned(VEC_ALIGNMENT)));  //FIXME Overflow for large cases?
+    memset(residual, 0, num_x * num_y * num_z * sizeof(CMFD_PRECISION));
 
     /* Compute the RMSE */
 #pragma omp parallel for private(new_source, old_source)
     for (int i = 0; i < num_x*num_y*num_z; i++) {
       new_source = 0.0;
       old_source = 0.0;
+#pragma omp simd reduction(+:new_source,old_source)
       for (int g = 0; g < num_groups; g++) {
         new_source += X->getValue(i, g);
         old_source += Y->getValue(i, g);
       }
-      if (fabs(old_source) > FLT_EPSILON)
-        residual.setValue(i, 0, pow((new_source - old_source) / old_source, 2));
+      if (fabs(old_source) > FLUX_EPSILON)
+        residual[i] = pow((new_source - old_source) / old_source, 2);
     }
-    sum_residuals = residual.getSum();
+
+    // Sum residuals
+#pragma omp simd reduction(+:sum_residuals) aligned(residual)
+    for (int i = 0; i < num_x*num_y*num_z; i++)
+      sum_residuals += residual[i];
+
     norm = num_x * num_y * num_z;
   }
   else {
 
+    //FIXME Incurs a memory allocation, uses unnecessary locks
     Vector residual(cell_locks, num_x, num_y, num_z, num_groups);
 
     /* Compute the RMSE */
 #pragma omp parallel for
     for (int i = 0; i < num_x*num_y*num_z; i++) {
       for (int g = 0; g < num_groups; g++) {
-        if (fabs(X->getValue(i, g)) > FLT_EPSILON)
+        if (fabs(X->getValue(i, g)) > FLUX_EPSILON)
           residual.setValue(i, g, pow((X->getValue(i, g) - Y->getValue(i, g)) /
                                       X->getValue(i, g), 2));
       }
@@ -660,166 +689,6 @@ double computeRMSE(Vector* X, Vector* Y, bool integrated,
 #endif
 
   return rmse;
-}
-
-
-/**
- * @brief Solves a linear system using Red-Black Gauss Seidel with
- *        successive over-relaxation. //DEPRECATED
- * @details This function takes in a loss + streaming Matrix (A),
- *          a fission gain Matrix (M), a flux Vector (X), a source Vector (B),
- *          a source convergence tolerance (tol) and a successive
- *          over-relaxation factor (SOR_factor) and computes the
- *          solution to the linear system. The input X Vector is modified in
- *          place to be the solution vector.
- * @param A the loss + streaming Matrix object
- * @param M the fission gain Matrix object
- * @param X the flux Vector object
- * @param B the source Vector object
- * @param tol the power method and linear solve source convergence threshold
- * @param SOR_factor the successive over-relaxation factor
- * @param convergence_data a summary of how to solver converged
- */
-void oldLinearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
-                 double SOR_factor, ConvergenceData* convergence_data) {
-
-  /* Check for consistency of matrix and vector dimensions */
-  if (A->getNumX() != B->getNumX() || A->getNumX() != X->getNumX() ||
-      A->getNumX() != M->getNumX())
-    log_printf(ERROR, "Cannot perform linear solve with different x dimensions"
-               " for the A matrix, M matrix, B vector, and X vector: "
-               "(%d, %d, %d, %d)", A->getNumX(), M->getNumX(),
-               B->getNumX(), X->getNumX());
-  else if (A->getNumY() != B->getNumY() || A->getNumY() != X->getNumY() ||
-           A->getNumY() != M->getNumY())
-    log_printf(ERROR, "Cannot perform linear solve with different y dimensions"
-               " for the A matrix, M matrix, B vector, and X vector: "
-               "(%d, %d, %d, %d)", A->getNumY(), M->getNumY(),
-               B->getNumY(), X->getNumY());
-  else if (A->getNumZ() != B->getNumZ() || A->getNumZ() != X->getNumZ() ||
-           A->getNumZ() != M->getNumZ())
-    log_printf(ERROR, "Cannot perform linear solve with different z dimensions"
-               " for the A matrix, M matrix, B vector, and X vector: "
-               "(%d, %d, %d, %d)", A->getNumZ(), M->getNumZ(),
-               B->getNumZ(), X->getNumZ());
-  else if (A->getNumGroups() != B->getNumGroups() ||
-           A->getNumGroups() != X->getNumGroups() ||
-           A->getNumGroups() != M->getNumGroups())
-    log_printf(ERROR, "Cannot perform linear solve with different num groups"
-               " for the A matrix, M matrix, B vector, and X vector: "
-               "(%d, %d, %d, %d)", A->getNumGroups(), M->getNumGroups(),
-               B->getNumGroups(), X->getNumGroups());
-
-  /* Initialize variables */
-  double residual;
-  int iter = 0;
-  omp_lock_t* cell_locks = X->getCellLocks();
-  int num_x = X->getNumX();
-  int num_y = X->getNumY();
-  int num_z = X->getNumZ();
-  int num_groups = X->getNumGroups();
-  int num_rows = X->getNumRows();
-  Vector X_old(cell_locks, num_x, num_y, num_z, num_groups);
-  CMFD_PRECISION* x_old = X_old.getArray();
-  int* IA = A->getIA();
-  int* JA = A->getJA();
-  CMFD_PRECISION* DIAG = A->getDiag();
-  CMFD_PRECISION* a = A->getA();
-  CMFD_PRECISION* x = X->getArray();
-  CMFD_PRECISION* b = B->getArray();
-  int row, col;
-  Vector old_source(cell_locks, num_x, num_y, num_z, num_groups);
-  Vector new_source(cell_locks, num_x, num_y, num_z, num_groups);
-
-  /* Compute initial source */
-  matrixMultiplication(M, X, &old_source);
-
-  double initial_residual = 0;
-  while (iter < MAX_LINEAR_SOLVE_ITERATIONS) {
-
-    /* Pass new flux to old flux */
-    X->copyTo(&X_old);
-
-    /* Iteration over red/black cells */
-    for (int color = 0; color < 2; color++) {
-      for (int oct = 0; oct < 8; oct++) {
-#pragma omp parallel for private(row, col) collapse(3)
-        for (int cz = (oct / 4) * num_z/2; cz < (oct / 4 + 1) * num_z/2;
-             cz++) {
-          for (int cy = (oct % 4 / 2) * num_y/2;
-              cy < (oct % 4 / 2 + 1) * num_y/2; cy++) {
-            for (int cx = (oct % 4 % 2) * num_x/2;
-                cx < (oct % 4 % 2 + 1) * num_x/2; cx++) {
-
-              /* check for correct color */
-              if (((cx % 2)+(cy % 2)+(cz % 2)) % 2 == color) {
-
-                for (int g = 0; g < num_groups; g++) {
-
-                  row = ((cz*num_y + cy)*num_x + cx)*num_groups + g;
-
-                  /* Over-relax the x array */
-                  x[row] = (1.0 - SOR_factor) * x[row];
-
-                  for (int i = IA[row]; i < IA[row+1]; i++) {
-
-                    /* Get the column index */
-                    col = JA[i];
-
-                    if (row == col)
-                      x[row] += SOR_factor * b[row] / DIAG[row];
-                    else
-                      x[row] -= SOR_factor * a[i] * x[col] / DIAG[row];
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    /* Compute the new source */
-    matrixMultiplication(M, X, &new_source);
-
-    /* Compute the residual */
-    residual = computeRMSE(&new_source, &old_source, true);
-    if (iter == 0) {
-      if (convergence_data != NULL)
-        convergence_data->linear_res_end = residual;
-      initial_residual = residual;
-    }
-
-    /* Copy the new source to the old source */
-    new_source.copyTo(&old_source);
-
-    /* Increment the interations counter */
-    iter++;
-
-    log_printf(INFO, "SOR iter: %d, residual: %f", iter, residual);
-
-    /* Exit linear solve loop if converged */
-    if ((residual < tol || residual / initial_residual < 0.1)
-         && iter > MIN_LINEAR_SOLVE_ITERATIONS) {
-      if (convergence_data != NULL)
-        convergence_data->linear_iters_end = iter;
-      break;
-    }
-  }
-
-  log_printf(INFO, "linear solve iterations: %d", iter);
-
-  /* Check if the maximum iterations were reached */
-  if (iter == MAX_LINEAR_SOLVE_ITERATIONS) {
-    log_printf(WARNING, "Linear solve failed to converge in %d iterations",
-               iter);
-
-    for (int i=0; i < num_x*num_y*num_z*num_groups; i++) {
-      if (x[i] < 0.0)
-        x[i] = 0.0;
-    }
-    X->scaleByValue(num_rows / X->getSum());
-  }
 }
 
 
@@ -888,6 +757,13 @@ bool ddLinearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
 
           int cell = (iz*num_y + iy)*num_x + ix;
 
+          /* Find index into communicator buffers for cells on surfaces */
+          bool on_surface = (iz==0) || (iz==num_z-1) || (iy==0) || (iy==num_y-1)
+               || (ix==0) || (ix==num_x-1);
+          int domain_surface_index = -1;
+          if (comm != NULL && on_surface)
+            domain_surface_index = comm->mapLocalToSurface[cell];
+
           /* Determine whether each group's row is diagonally dominant */
           for (int e = 0; e < num_groups; e++) {
 
@@ -905,11 +781,12 @@ bool ddLinearSolve(Matrix* A, Matrix* M, Vector* X, Vector* B, double tol,
 
             /* Add off-node off-diagonal elements */
 #ifdef MPIx
-            if (comm != NULL) {
+            if (comm != NULL && on_surface) {
+              int row_surf = domain_surface_index * num_groups + e;
               int* coupling_sizes = comm->num_connections[color];
               CMFD_PRECISION** coupling_coeffs = comm->coupling_coeffs[color];
-              for (int idx = 0; idx < coupling_sizes[row]; idx++)
-                row_sum += fabs(coupling_coeffs[row][idx]);
+              for (int idx=0; idx < coupling_sizes[row_surf]; idx++)
+                row_sum += fabs(coupling_coeffs[row_surf][idx]);
             }
 #endif
 

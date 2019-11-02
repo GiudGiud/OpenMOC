@@ -81,8 +81,7 @@ single-assembly/single-c5g7-assembly.cpp \
 load-geometry/load-geometry.cpp \
 load-geometry/load-single-assembly.cpp \
 load-geometry/load-2D-full-core.cpp \
-load-geometry/load-full-core.cpp \
-non-uniform-lattice/non-uniform-lattice.cpp
+load-geometry/load-full-core.cpp
 
 #===============================================================================
 # Sets Flags
@@ -141,6 +140,13 @@ ifeq ($(DEBUG),yes)
   CFLAGS += -O0
   CFLAGS += -g
   CFLAGS += -fno-omit-frame-pointer
+else
+  ifeq ($(COMPILER),gnu)
+    CFLAGS += -Wno-unused-result
+  endif
+  ifeq ($(COMPILER),mpi)
+    CFLAGS += -Wno-unused-result
+  endif
 endif
 
 # Profiling Flags
@@ -169,23 +175,23 @@ ifeq ($(CMFD_PRECISION),double)
   CFLAGS += -DCMFD_PRECISION=double -DLINALG_TOL=1E-15
 endif
 
-# Vector Flags
-CFLAGS += -DVEC_LENGTH=8
+# Vector Flags, take into account strip mining with VEC_LENGTH sized vectors
+CFLAGS += -DVEC_LENGTH=32
 CFLAGS += -DVEC_ALIGNMENT=32
 
 # Optimization Flags
 ifeq ($(OPTIMIZE),yes)
   ifeq ($(COMPILER),gnu)
-    CFLAGS += -O3 -ffast-math -fpic -march=native
+    CFLAGS += -O3 -ffast-math -fpic -march=native #-flto
   endif
   ifeq ($(COMPILER),mpi)
-    CFLAGS += -O3 -ffast-math -fpic -march=native
+    CFLAGS += -O3 -ffast-math -fpic -march=native #-flto
   endif
   ifeq ($(COMPILER),intel)
-    CFLAGS += -O3 -xhost -ansi-alias -no-prec-div -ipo
+    CFLAGS += -O3 -xhost -ansi-alias -no-prec-div #-ipo
   endif
   ifeq ($(COMPILER),impi)
-    CFLAGS += -O3 -xhost -ansi-alias -no-prec-div -ipo
+    CFLAGS += -O3 -xhost -ansi-alias -no-prec-div #-ipo
   endif
   ifeq ($(COMPILER),bluegene)
     CFLAGS += -O3 -ffast-math -fpic
@@ -199,6 +205,8 @@ ifeq ($(OPTIMIZE),yes)
   CFLAGS += -DLINEARSOURCE
   # Set the dimension to 3D at compile time
   #CFLAGS += -DTHREED
+  # Only vacuum boundary conditions, avoid double store of track fluxes
+  #CFLAGS += -DONLYVACUUMBC
 endif
 
 # Optimization report flags
