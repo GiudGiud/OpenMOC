@@ -1627,13 +1627,13 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
     for(auto it = _surface_map->cbegin(); it != _surface_map->cend(); ++it){
       log_printf(NORMAL, "Surface %s - index %d", it->first.c_str(), it->second);
     }
-    log_printf(NORMAL, "random df %.4f %.4f %.4f", _df[0][69], _df[1][69], _df[4][69]);
+    log_printf(NORMAL, "random df %.4f %.4f %.4f", _df[0][69], _df[1][69], _df[1+_num_polar/2][69]);
 
-    log_printf(INFO_ONCE, "FSR to cells map in domain 1 (one out of ten fsrs)");
+    log_printf(INFO_ONCE, "FSR to cells map in domain 1");
     int a = -1;
     for(auto it = _fsr_to_cells->cbegin(); it != _fsr_to_cells->cend(); ++it){
       a++;
-      if (a%10 == 0 and _geometry->getNumFSRs()<1000)
+      if (a % std::max(long(4), _geometry->getNumFSRs() / 20) == 0)
         log_printf(INFO_ONCE, "%d %s", it->first, it->second->getName());
     }
   }

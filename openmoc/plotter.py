@@ -124,6 +124,19 @@ def plot_tracks(track_generator, get_figure=False, plot_3D=False):
     # Make figure of line segments for each Track
     fig = plt.figure()
     fig.patch.set_facecolor('none')
+
+    # Import a picture to draw upon
+    import cv2 as opencv
+    img = opencv.imread("baseline.png")
+    img = opencv.cvtColor(img, opencv.COLOR_BGR2RGB)
+    plt.imshow(img, extent=[x.min(), x.max(), y.min(), y.max()], interpolation='none')
+    plt.axis('off')
+    plt.draw()
+    plt.savefig("base_moc")
+
+    plt.xlim([x.min(), x.max()])
+    plt.ylim([y.min(), y.max()])
+
     if plot_3D:
         ax = fig.gca(projection = '3d')
         for i in range(num_tracks):
@@ -132,10 +145,9 @@ def plot_tracks(track_generator, get_figure=False, plot_3D=False):
           ax.set_zlim(z.min(), z.max())
     else:
         for i in range(num_tracks):
-            plt.plot(x[i*2:(i+1)*2], y[i*2:(i+1)*2], 'b-')
-
-    plt.xlim([x.min(), x.max()])
-    plt.ylim([y.min(), y.max()])
+            plt.plot(x[i*2:(i+1)*2], y[i*2:(i+1)*2], 'k-')
+            plt.draw()
+            plt.savefig("tracks_"+str(i), dpi=1000)
 
 
     title = 'Tracks for {0} angles and {1} cm spacing'\

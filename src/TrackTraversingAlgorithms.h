@@ -176,6 +176,7 @@ private:
   int _num_flat;
   Point** _starting_points;
   double** _thread_source_constants;
+  std::vector<int> num_traversing_tracks;
   ExpEvaluator* _exp_evaluator;
   Progress* _progress;
 

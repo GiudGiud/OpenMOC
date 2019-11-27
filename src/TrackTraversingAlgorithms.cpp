@@ -501,6 +501,9 @@ LinearExpansionGenerator::LinearExpansionGenerator(CPULSSolver* solver)
   int num_threads = omp_get_max_threads();
   _starting_points = new Point*[num_threads];
 
+  /* Keep track of the number of tracks crossing each FSR */
+  num_traversing_tracks.resize(track_generator->getGeometry()->getNumFSRs(),0);
+
   for (int i=0; i < num_threads; i++)
     _starting_points[i] = new Point[num_rows];
 
@@ -565,11 +568,14 @@ void LinearExpansionGenerator::execute() {
             lem[r*nc + 2] * lem[r*nc + 2] * lem[r*nc + 5];
 
       double volume = _FSR_volumes[r];
-      if (std::abs(det) < MIN_DET || volume < 1e-6) {
+      if (std::abs(det) < MIN_DET || volume < 1e-6 ||
+          num_traversing_tracks.at(r) < 2) {
         if (volume > 0)
           log_printf(DEBUG, "Unable to form linear source components in "
                      "source region %d : determinant %.2e volume %.2e", r, det,
                      volume);
+        if (volume > 0 && num_traversing_tracks.at(r) < 2)
+          log_printf(INFO, "Region of volume  %.2e has only %d tracks", volume, num_traversing_tracks.at(r));
 
 #pragma omp atomic update
         _num_flat++;
@@ -812,6 +818,9 @@ void LinearExpansionGenerator::onTrack(Track* track, segment* segments) {
         _src_constants[fsr*_NUM_GROUPS*_NUM_COEFFS + i*_NUM_GROUPS + g] +=
           thread_src_constants[i*_NUM_GROUPS + g];
     }
+
+    /* Tally number of tracks crossing each fsr */
+    num_traversing_tracks[fsr]++;
 
     /* Unset the lock for this FSR */
     omp_unset_lock(&_FSR_locks[fsr]);

@@ -29,8 +29,8 @@ CMFD_PRECISION ?= single
 #case = models/homogeneous/homogeneous.cpp
 #case = models/non-uniform-lattice/non-uniform-lattice.cpp
 #case ?= models/run_time_standard/run_time_standard.cpp
-#case ?= models/assembly_1/load-assembly_df.cpp
-case ?= models/core_2d/load-core.cpp
+case ?= models/assembly_3e/load-assembly.cpp
+#case ?= models/core_2d/load-core.cpp
 
 source = \
 Cell.cpp \
@@ -64,24 +64,18 @@ Universe.cpp \
 Vector.cpp
 
 cases = \
-Takeda/Takeda-unrodded.cpp \
-pin-cell/pin-cell-3d.cpp \
-fixed-source/pin-cell-fixed-3d.cpp \
-simple-lattice/simple-lattice-3d.cpp \
-gradients/one-directional/one-directional-gradient.cpp \
-gradients/two-directional/two-directional-gradient.cpp \
-c5g7/c5g7-3d.cpp \
-c5g7/c5g7-3d-cmfd.cpp \
-c5g7/c5g7-rodded-B.cpp \
-c5g7/c5g7-rodded-B-2x2.cpp \
-c5g7/c5g7-ws.cpp \
-homogeneous/homogeneous.cpp \
-single-assembly/quarter-c5g7-assembly.cpp \
-single-assembly/single-c5g7-assembly.cpp \
-load-geometry/load-geometry.cpp \
-load-geometry/load-single-assembly.cpp \
-load-geometry/load-2D-full-core.cpp \
-load-geometry/load-full-core.cpp
+assembly_4ba/load-assembly.cpp\
+assembly_4bb/load-assembly.cpp\
+assembly_4bc/load-assembly.cpp\
+assembly_4bd/load-assembly.cpp\
+assembly_4be/load-assembly.cpp\
+assembly_4bf/load-assembly.cpp\
+assembly_3a/load-assembly.cpp\
+assembly_3b/load-assembly.cpp\
+assembly_3c/load-assembly.cpp\
+assembly_3d/load-assembly.cpp\
+assembly_3e/load-assembly.cpp\
+assembly_3f/load-assembly.cpp
 
 #===============================================================================
 # Sets Flags
