@@ -1385,14 +1385,16 @@ void Solver::computeFlux(int max_iters, bool only_fixed_source) {
       log_printf(NORMAL, "Surface %s - index %d", it->first.c_str(), it->second);
     }
     if (_use_DF==1)
-      log_printf(NORMAL, "random dfs %.4e %.4e %.4e", _df[1][4], _df[2][4], _df[4][4]);
+      log_printf(NORMAL, "random dfs %.4e %.4e %.4e", _df[0][4], _df[1][4], _df[1+_num_polar/2][4]);
     if (_use_DF>=2)
       log_printf(NORMAL, "random currents %.4e %.4e %.4e", _reference_currents[1][0],
                  _reference_currents[2][3], _reference_currents[2][6]);
 
-    log_printf(INFO, "FSR to cells map");
+    log_printf(INFO_ONCE, "FSR to cells map in domain 1");
     for(auto it = _fsr_to_cells->cbegin(); it != _fsr_to_cells->cend(); ++it){
-      log_printf(INFO, "%d %s", it->first, it->second->getName());
+      auto fsr = std::distance(_fsr_to_cells->cbegin(), it);
+      if (fsr % std::max(long(4), _geometry->getNumFSRs() / 20) == 0)
+        log_printf(INFO_ONCE, "%d %s", it->first, it->second->getName());
     }
   }
 

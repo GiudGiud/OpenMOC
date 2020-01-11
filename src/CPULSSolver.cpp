@@ -619,7 +619,6 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
              * exp_F1 - src_linear[e] * length * length * exp_F2;
 
         /* Apply DF */
-        FP_PRECISION old_delta_psi = delta_psi;
         delta_psi *= df[e];
         delta_psi -= (df[e] - 1) * track_flux[e];
         //exp_H *= df[e]; //////////////
@@ -650,7 +649,6 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
            * exp_F1 - src_linear[e] * length * length * exp_F2;
 
       /* Apply DF */
-      FP_PRECISION old_delta_psi = delta_psi;
       delta_psi *= df[e];
       delta_psi -= (df[e] - 1) * track_flux[e];
       //exp_H *= df[e]; //////////////
@@ -731,7 +729,7 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
       /* Obtain discontinuity factor */
       int p = pe / _NUM_GROUPS;
       int e = pe % _NUM_GROUPS;
-      if (_use_DF > 0 and df_index >=0)
+      if (_use_DF > 0 and df_index >=0 and _num_iterations >= _start_DF)
         df = _df[df_index+ p];
       else
         df = _df[0];
@@ -745,11 +743,9 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
             * src_linear[pe] * exp_F2[pe];
 
       // Apply discontinuity factor
-      if (_use_DF > 0 and df_index >= 0 and _num_iterations >= _start_DF) {
-        delta_psi[pe] *= df[e];
-        delta_psi[pe] -= (df[e] - 1) * track_flux[pe];
-        //exp_H *= df[e];
-      }
+      delta_psi[pe] *= df[e];
+      delta_psi[pe] -= (df[e] - 1) * track_flux[pe];
+      //exp_H *= df[e];
 
       track_flux[pe] -= delta_psi[pe];
       delta_psi[pe] *= wgt;
