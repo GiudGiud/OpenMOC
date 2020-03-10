@@ -210,11 +210,14 @@ void CPULSSolver::initializeFixedSources() {
 
     /* Warn the user if a fixed source has already been assigned to this FSR */
     if ((fabs(_fixed_sources_xyz(fsr_id,group,0)) > FLT_EPSILON &&
-         fabs(_fixed_sources_xyz(fsr_id,group,0) - source_x) > FLT_EPSILON) ||
+         fabs(_fixed_sources_xyz(fsr_id,group,0) - source_x) > FLT_EPSILON &&
+         fabs(source_x) > FLT_EPSILON) ||
         (fabs(_fixed_sources_xyz(fsr_id,group,1)) > FLT_EPSILON &&
-         fabs(_fixed_sources_xyz(fsr_id,group,1) - source_y) > FLT_EPSILON) ||
+         fabs(_fixed_sources_xyz(fsr_id,group,1) - source_y) > FLT_EPSILON &&
+         fabs(source_y) > FLT_EPSILON) ||
         (fabs(_fixed_sources_xyz(fsr_id,group,2)) > FLT_EPSILON &&
-         fabs(_fixed_sources_xyz(fsr_id,group,2) - source_z) > FLT_EPSILON))
+         fabs(_fixed_sources_xyz(fsr_id,group,2) - source_z) > FLT_EPSILON &&
+         fabs(source_z) > FLT_EPSILON))
       log_printf(WARNING, "Overriding fixed linear source %f %f %f in FSR ID=%d"
                  " group %d with %f %f %f", _fixed_sources_xyz(fsr_id,group, 0),
                  _fixed_sources_xyz(fsr_id,group,1),
@@ -558,9 +561,8 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
     df_index = getDfIndex(fsr_id, next_fsr_id, _SOLVE_3D * polar_index);
     if (df_index >= 0 && _num_iterations >= _start_DF)
       df = _df[df_index];
-    /* If wrong surface or other case, use an array of 1s for DF */
-    else
-      df = _df[0];
+    //if (curr_segment->_material->getName()[0] != 'F') // 3D ONLY 
+    //  df = _df[0];
   }
 
   if (_SOLVE_3D) {
@@ -622,6 +624,7 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
         delta_psi *= df[e];
         delta_psi -= (df[e] - 1) * track_flux[e];
         //exp_H *= df[e]; //////////////
+        //delta_psi = std::max(delta_psi, - length * src_flat[e] * exp_F1);  //limit DF
 
         track_flux[e] -= delta_psi;
 
@@ -651,7 +654,6 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
       /* Apply DF */
       delta_psi *= df[e];
       delta_psi -= (df[e] - 1) * track_flux[e];
-      //exp_H *= df[e]; //////////////
 
       track_flux[e] -= delta_psi;
 
@@ -733,6 +735,9 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
         df = _df[df_index+ p];
       else
         df = _df[0];
+
+      //if (df_index >= 2*num_polar_2) // 2D : disable all other DFs  (CARE, indexing is 2, 6, 10)
+      //  df = _df[0];
 
       FP_PRECISION wgt = _quad->getWeightInline(azim_index, int(pe/_NUM_GROUPS));
       exp_H[pe] *=  wgt * tau[pe] * length * track_flux[pe];
@@ -895,7 +900,20 @@ void CPULSSolver::addSourceToScalarFlux() {
         if (_scalar_flux(r, e) < 0.0 && !_negative_fluxes_allowed) {
 #pragma omp atomic update
           num_negative_fluxes++;
-          _scalar_flux(r,e) = std::max(_old_scalar_flux(r,e), FLUX_EPSILON);
+
+          // Current error to be adjusted
+          //FP_PRECISION current_error = _scalar_flux(r, e) * sigma_t[e];
+          //double sum_tallied_currents = 0;  // will help for selection proportions
+
+          // increase source not to be bothered next time
+          //if (r==4 and e==0)
+          //log_printf(WARNING, "%d %d %e %e", r, e, _reduced_sources(r, e), _scalar_flux(r, e)  * sigma_t[e] / FOUR_PI);
+          //_reduced_sources(r, e) -= _scalar_flux(r, e) * sigma_t[e] / FOUR_PI;
+          //_fixed_sources(r, e) -= _scalar_flux(r, e) * sigma_t[e] / FOUR_PI;
+          //if (_num_iterations > 10)  // dont want to get some unconverged ones in
+          //  _fix_src_FSR_map.at(std::make_pair (r,e+1)) -= _scalar_flux(r, e) * sigma_t[e] / FOUR_PI;
+
+          _scalar_flux(r,e) = FLUX_EPSILON;
           _scalar_flux_xyz(r,e,0) = 0;
           _scalar_flux_xyz(r,e,1) = 0;
           _scalar_flux_xyz(r,e,2) = 0;

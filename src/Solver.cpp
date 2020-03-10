@@ -1301,7 +1301,7 @@ void Solver::scatterTransportSweep() {
  *
  *          The only_fixed_source runtime parameter may be used to control
  *          the type of source distribution used in the calculation. By
- *          default, this paramter is true and only the fixed sources specified
+ *          default, this parameter is true and only the fixed sources specified
  *          by the user will be considered. Alternatively, when the parameter
  *          is false, the source will be computed as the scattering and fission
  *          sources resulting from a previously computed flux distribution
@@ -2465,6 +2465,7 @@ void Solver::setFirstDFIteration(int start_df){
     _start_DF = start_df;
 }
 
+
 /**
  * @brief Initialize vectors that contain the reference current and MOC current
  * @details Current arrays are index by surface/polar angle then by energy group
@@ -2574,7 +2575,7 @@ void Solver::setReferencePartialCurrent(int surface_index, int polar_index,
  * @brief Compute discontinuity factors using the reference and MOC-tallied currents
  * @params reset whether to reset the discontinuity factors to 0
  */
-void Solver::computeDiscontinuityFactors(bool reset) {
+void Solver::computeDiscontinuityFactors(bool reset, bool preserve_net_current, bool polar_dependent) {
 
   if (_df.size() == 0)
     log_printf(ERROR, "Discontinuity factors array has not been initialized.");
@@ -2584,6 +2585,32 @@ void Solver::computeDiscontinuityFactors(bool reset) {
   int num_polar = _num_polar;
   if (!_SOLVE_3D)
     num_polar /= 2;
+
+  // Integrate across polar angles
+  if (!polar_dependent) {
+    for (int g=0; g<_num_groups; g++) {
+      for (int s=0; s<_num_surfaces; s++) {
+
+        double ref_current = 0;
+        double tallied_current = 0;
+        for (int p=0; p<num_polar; p++) {
+          int df_index = 1+s*num_polar + p;
+          ref_current += _reference_currents[df_index][g] * _quad->getPolarWeight(0, p);
+          tallied_current += _tallied_currents[df_index][g] * _quad->getPolarWeight(0, p);
+        }
+        //if (s==0 and g==10)
+        //  log_printf(WARNING, "%f %f", _tallied_currents[1][g], _reference_currents[1][g]);
+        for (int p=0; p<num_polar; p++) {
+          int df_index = 1+s*num_polar + p;
+          //if (reset)
+            _reference_currents[df_index][g] = 2*ref_current;
+          _tallied_currents[df_index][g] = 2*tallied_current;
+        }
+        //if (s==0 and g==10)
+        //  log_printf(WARNING, "%f %f", _tallied_currents[1][g], _reference_currents[1][g]);
+      }
+    }
+  }
 
   if (reset) {
     for (int i=0; i<1+_num_surfaces * num_polar; i++)
@@ -2596,6 +2623,58 @@ void Solver::computeDiscontinuityFactors(bool reset) {
        //if (g==0)
        //  log_printf(NORMAL, "g%d : %f %f", g, _reference_currents[1+i][g], _tallied_currents[1+i][g]);
        _df[1 + i][g] = _reference_currents[1+i][g] / _tallied_currents[1+i][g];
+
+       // Preserve net current with one (or two) DFs  // THIS ASSUMES TWO SECTORS !!
+       if (preserve_net_current) {
+
+          // Hard coding net currents
+           int other_i = 0;
+           if (i < num_polar)
+               other_i = i + 2*num_polar;
+           else if (i < 2*num_polar)
+               other_i = i + 3*num_polar;
+           else if (i < 3*num_polar)
+               other_i = i - 2*num_polar;
+           else if (i < 4*num_polar)
+               other_i = i + 3*num_polar;
+           else if (i < 5*num_polar)
+               other_i = i - 3*num_polar;
+           else if (i < 6*num_polar)
+               other_i = i + 3*num_polar;
+           else if (i < 7*num_polar)
+               other_i = i - 3*num_polar;
+           else if (i < 8*num_polar)
+               other_i = i + 3*num_polar;
+           else if (i < 9*num_polar)
+               other_i = i - 3*num_polar;
+           else if (i < 10*num_polar)
+               other_i = i + 2*num_polar;
+           else if (i < 11*num_polar)
+               other_i = i - 3*num_polar;
+           else if (i < 12*num_polar)
+               other_i = i - 2*num_polar;
+
+           // Limit the update to avoid printing the wrong residual
+           if (i >= 2*num_polar) {
+               _df[1 + i][g] = 1;
+               continue;
+           }
+
+
+           double net_current_mc = _reference_currents[1+i][g] - _reference_currents[1+other_i][g];
+
+           //if (g==0)
+           //   log_printf(WARNING, "%d -> %d : %f %f / %f %f : %f %f", i, other_i,
+           //                       _reference_currents[1+i][g], _reference_currents[1+other_i][g],
+           //                       _tallied_currents[1+i][g], _tallied_currents[1+other_i][g],
+           //                       _df[1 + i][g], (net_current_mc + _tallied_currents[1+other_i][g]) / _tallied_currents[1+i][g]);
+
+           if (g==0)
+              log_printf(WARNING, "%d -> %d : %f %f", i, other_i,
+                                  _df[1 + i][g], _df[1 + other_i][g]);
+           _df[1 + i][g] = (net_current_mc + _df[1 + other_i][g] * _tallied_currents[1+other_i][g]) / _tallied_currents[1+i][g];
+       }
+
   } } }
 }
 
@@ -2687,6 +2766,8 @@ void Solver::loadDFFromFile(std::string filename, int num_surfaces){
       last = next + 1;
       g++;
     }
+
+    /* Last energy group on line */
     _df.at(1 + s*num_polar + p).at(g) = std::stod(line.substr(last));
     if (_SOLVE_3D)
       _df.at(1 + s*_num_polar + (_num_polar - 1 - p)).at(g) = _df.at(1 + s*_num_polar + p).at(g);
