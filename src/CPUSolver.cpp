@@ -2583,7 +2583,6 @@ void CPUSolver::addSourceToScalarFlux() {
 
       if (_scalar_flux(r, e) < 0.0 && !_negative_fluxes_allowed) {
 
-
         // Current error to be adjusted
         //FP_PRECISION current_error = _scalar_flux(r, e) * sigma_t[e];
         //double sum_tallied_currents = 0;  // will help for selection proportions

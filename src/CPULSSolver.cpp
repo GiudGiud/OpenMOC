@@ -624,7 +624,6 @@ void CPULSSolver::tallyLSScalarFlux(segment* curr_segment, long next_fsr_id,
         delta_psi *= df[e];
         delta_psi -= (df[e] - 1) * track_flux[e];
         //exp_H *= df[e]; //////////////
-        //delta_psi = std::max(delta_psi, - length * src_flat[e] * exp_F1);  //limit DF
 
         track_flux[e] -= delta_psi;
 
@@ -914,6 +913,7 @@ void CPULSSolver::addSourceToScalarFlux() {
           //  _fix_src_FSR_map.at(std::make_pair (r,e+1)) -= _scalar_flux(r, e) * sigma_t[e] / FOUR_PI;
 
           _scalar_flux(r,e) = FLUX_EPSILON;
+          _scalar_flux(r,e) = std::max(_old_scalar_flux(r,e), FLUX_EPSILON);
           _scalar_flux_xyz(r,e,0) = 0;
           _scalar_flux_xyz(r,e,1) = 0;
           _scalar_flux_xyz(r,e,2) = 0;
