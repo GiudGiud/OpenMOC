@@ -214,11 +214,39 @@ void CPUSolver::setFixedSourceByFSR(long fsr_id, int group,
 
   /* Warn the user if a fixed source has already been assigned to this FSR */
   if (fabs(_fixed_sources(fsr_id,group-1)) > FLT_EPSILON)
-    log_printf(WARNING, "Overriding fixed source %f in FSR ID=%d group %g, with"
+    log_printf(WARNING, "Overriding fixed source %f in FSR ID=%d group %d, with"
                " %f", _fixed_sources(fsr_id,group-1), fsr_id, group, source);
 
   /* Store the fixed source for this FSR and energy group */
   _fixed_sources(fsr_id,group-1) = source;
+}
+
+
+/**
+ * @brief Reset all fixed sources and fixed sources moments to 0.
+ */
+void CPUSolver::resetFixedSources() {
+
+  /* Reset fixed source by FSR map */
+  std::map< std::pair<int, int>, FP_PRECISION >::iterator fsr_iter;
+  for (fsr_iter = _fix_src_FSR_map.begin();
+       fsr_iter != _fix_src_FSR_map.end(); ++fsr_iter)
+    fsr_iter->second = 0;
+
+  /* Reset fixed source by cell map */
+  std::map< std::pair<Cell*, int>, FP_PRECISION >::iterator cell_iter;
+  for (cell_iter = _fix_src_cell_map.begin();
+       cell_iter != _fix_src_cell_map.end(); ++cell_iter)
+    cell_iter->second = 0;
+
+  /* Reset fixed source by material map */
+  std::map< std::pair<Material*, int>, FP_PRECISION >::iterator mat_iter;
+  for (mat_iter = _fix_src_material_map.begin();
+       mat_iter != _fix_src_material_map.end(); ++mat_iter)
+    mat_iter->second = 0;
+
+  /* Reset array of fixed sources */
+  memset(_fixed_sources, 0, _num_FSRs * _NUM_GROUPS * sizeof(FP_PRECISION));
 }
 
 
@@ -2299,6 +2327,9 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, long next_fsr_id,
 
     if (df_index >= 0 && _num_iterations >= _start_DF)
       df = _df[df_index];
+
+    //if (curr_segment->_material->getName()[0] != 'F')  // disable DFs that are not fuel outgoing
+    //  df = _df[0];
   }
 
   if (_SOLVE_3D) {
@@ -2552,6 +2583,16 @@ void CPUSolver::addSourceToScalarFlux() {
       _scalar_flux(r, e) += FOUR_PI * _reduced_sources(r, e) / sigma_t[e];
 
       if (_scalar_flux(r, e) < 0.0 && !_negative_fluxes_allowed) {
+
+        // Current error to be adjusted
+        //FP_PRECISION current_error = _scalar_flux(r, e) * sigma_t[e];
+        //double sum_tallied_currents = 0;  // will help for selection proportions
+
+        // increase source not to be bothered next time
+        //_reduced_sources(r, e) -= _scalar_flux(r, e) * sigma_t[e] / FOUR_PI;
+        //if (_num_iterations > 10)  // dont want to get some unconverged ones in
+        //  _fix_src_FSR_map.at(std::make_pair (r,e+1)) -= _scalar_flux(r, e) * sigma_t[e] / FOUR_PI;
+
         _scalar_flux(r, e) = FLUX_EPSILON;
 
 #pragma omp atomic update

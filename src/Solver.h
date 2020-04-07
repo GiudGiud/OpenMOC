@@ -512,6 +512,7 @@ public:
   void setCheckXSLogLevel(logLevel log_level);
   void setChiSpectrumMaterial(Material* material);
   void resetMaterials(solverMode mode);
+  virtual void resetFixedSources() = 0;
 
   void fissionTransportSweep();
   void scatterTransportSweep();
@@ -602,7 +603,7 @@ public:
   void setStartKeff(double keff);
   void setReferencePartialCurrent(int surface_index, int polar_index,
                                   int energy_group, FP_PRECISION current);
-  void computeDiscontinuityFactors(bool reset);
+  void computeDiscontinuityFactors(bool reset, bool preserve_net_current=false, bool polar_dependent=true);
   void setDiscontinuityFactor(int surf_index, int polar_index,
                               int energy_group, FP_PRECISION df);
   void loadDFFromFile(std::string filename, int num_surfaces);
