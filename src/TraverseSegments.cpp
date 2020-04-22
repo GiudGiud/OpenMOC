@@ -655,10 +655,10 @@ void TraverseSegments::traceStackOTF(Track* flattened_track, int polar_index,
       long fsr_id = extruded_FSR->_fsr_ids[z_ind];
       long next_fsr_id = next_extruded_FSR->_fsr_ids[
                    geometry->findAxialIndexInExtrudedFSR(next_extruded_FSR, height)];
-      if (prev_fsr_id > geometry->getNumFSRs())
-        log_printf(ERROR, "Previous fsr id is not a valid fsr");
-      if (next_fsr_id > geometry->getNumFSRs())
-        log_printf(ERROR, "Next fsr id is not a valid fsr");
+      if (prev_fsr_id > geometry->getNumFSRs() or prev_fsr_id < 0)
+        log_printf(ERROR, "Previous fsr id is not a valid fsr %d", prev_fsr_id);
+      if (next_fsr_id > geometry->getNumFSRs() or next_fsr_id < 0)
+        log_printf(ERROR, "Next fsr id is not a valid fsr %d", next_fsr_id);
 
       /* Extract the Material ID of this 3D FSR */
       Material* material = extruded_FSR->_materials[z_ind];

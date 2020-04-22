@@ -2621,45 +2621,18 @@ void Solver::computeDiscontinuityFactors(bool reset, bool preserve_net_current, 
     for (int i=0; i<_num_surfaces * num_polar; i++) {
      for (int g=0; g<_num_groups; g++) {
        //if (g==0)
-       //  log_printf(NORMAL, "g%d : %f %f", g, _reference_currents[1+i][g], _tallied_currents[1+i][g]);
+      //   log_printf(NORMAL, "g%d : %f %f", g, _reference_currents[1+i][g], _tallied_currents[1+i][g]);
        _df[1 + i][g] = _reference_currents[1+i][g] / _tallied_currents[1+i][g];
 
        // Preserve net current with one (or two) DFs  // THIS ASSUMES TWO SECTORS !!
        if (preserve_net_current) {
 
-          // Hard coding net currents
-           int other_i = 0;
+          // Hard coding net currents FOR BOTH SURFACES
+           int other_i = -1;
            if (i < num_polar)
-               other_i = i + 2*num_polar;
-           else if (i < 2*num_polar)
-               other_i = i + 3*num_polar;
-           else if (i < 3*num_polar)
-               other_i = i - 2*num_polar;
-           else if (i < 4*num_polar)
-               other_i = i + 3*num_polar;
-           else if (i < 5*num_polar)
-               other_i = i - 3*num_polar;
-           else if (i < 6*num_polar)
-               other_i = i + 3*num_polar;
-           else if (i < 7*num_polar)
-               other_i = i - 3*num_polar;
-           else if (i < 8*num_polar)
-               other_i = i + 3*num_polar;
-           else if (i < 9*num_polar)
-               other_i = i - 3*num_polar;
-           else if (i < 10*num_polar)
-               other_i = i + 2*num_polar;
-           else if (i < 11*num_polar)
-               other_i = i - 3*num_polar;
-           else if (i < 12*num_polar)
-               other_i = i - 2*num_polar;
-
-           // Limit the update to avoid printing the wrong residual
-           if (i >= 2*num_polar) {
-               _df[1 + i][g] = 1;
-               continue;
-           }
-
+             other_i = i + num_polar;
+           else if (i < 2* num_polar)
+             other_i = i - num_polar;
 
            double net_current_mc = _reference_currents[1+i][g] - _reference_currents[1+other_i][g];
 
@@ -2669,9 +2642,9 @@ void Solver::computeDiscontinuityFactors(bool reset, bool preserve_net_current, 
            //                       _tallied_currents[1+i][g], _tallied_currents[1+other_i][g],
            //                       _df[1 + i][g], (net_current_mc + _tallied_currents[1+other_i][g]) / _tallied_currents[1+i][g]);
 
-           if (g==0)
-              log_printf(WARNING, "%d -> %d : %f %f", i, other_i,
-                                  _df[1 + i][g], _df[1 + other_i][g]);
+          if (false && g==10)
+            log_printf(WARNING, "%d -> %d : %f %f", i, other_i,
+                               _df[1 + i][g], _df[1 + other_i][g]);
            _df[1 + i][g] = (net_current_mc + _df[1 + other_i][g] * _tallied_currents[1+other_i][g]) / _tallied_currents[1+i][g];
        }
 
@@ -2815,11 +2788,24 @@ int Solver::getDfIndex(int fsr_id, int next_fsr_id, int polar_index) {
   //std::cout << "FSR " << fsr_id << " next " << next_fsr_id << std::endl;
 
   /* Match fsrs to a cell, as DFs are stored as cell to cell */
-  std::string cell_from = _fsr_to_cells->find(fsr_id)->second->getName();
-  std::string cell_to = _fsr_to_cells->find(next_fsr_id)->second->getName();
+  //std::string cell_from = _fsr_to_cells->find(fsr_id)->second->getName();
+  //std::string cell_to = _fsr_to_cells->find(next_fsr_id)->second->getName();
 
   /* DFs are only for cell types right now, to use different DFs per cell couples,
      switch the lookup to use cell ids rather than cell names */
+   // Per id or parent id
+   std::string cell_from;
+   std::string cell_to;
+   if (_fsr_to_cells->find(fsr_id)->second->getParent() == NULL)
+     cell_from = std::to_string(_fsr_to_cells->find(fsr_id)->second->getId());
+   else
+     cell_from = std::to_string(_fsr_to_cells->find(fsr_id)->second->getParent()->getId());
+
+   if (_fsr_to_cells->find(next_fsr_id)->second->getParent() == NULL)
+     cell_to = std::to_string(_fsr_to_cells->find(next_fsr_id)->second->getId());
+   else
+     cell_to = std::to_string(_fsr_to_cells->find(next_fsr_id)->second->getParent()->getId());
+
 
   //log_printf(NORMAL, "Key %s -> %s", cell_from.c_str(), cell_to.c_str());
   int df_index = -1;
