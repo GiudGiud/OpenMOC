@@ -296,6 +296,7 @@ public:
   /* Setter methods */
   void setCmfd(Cmfd* cmfd);
   void setFSRCentroid(long fsr, Point* centroid);
+  void resetContainsFSRCentroids();
   void setOverlaidMesh(double axial_mesh_height, int num_x=0,
                        int num_y=0, int num_radial_domains=0,
                        int* radial_domains=NULL);
@@ -323,6 +324,9 @@ public:
   void initializeFSRVectors();
   void computeFissionability(Universe* univ=NULL);
   void manipulateXS();
+  void loadSPHFactors(double* sph_factors, int num_domains_groups,
+                      double* sph_to_domain_ids, int num_sph_domains,
+                      const char* domain_type);
 
   /* Obtain or print information about the geometry */
   std::vector<long> getSpatialDataOnGrid(std::vector<double> dim1,

@@ -531,7 +531,7 @@ LinearExpansionGenerator::~LinearExpansionGenerator() {
 
 
 /**
- * @brief When executed, the LinearExpansionGenerator Kernel loops over all 
+ * @brief When executed, the LinearExpansionGenerator Kernel loops over all
  *        Tracks to compute constant terms used to compute the linear source.
  */
 void LinearExpansionGenerator::execute() {
@@ -955,8 +955,9 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
 #else
   const int num_moments = 4;
 #endif
-  int num_groups_aligned = (_NUM_GROUPS / VEC_ALIGNMENT +
-                            (_NUM_GROUPS % VEC_ALIGNMENT != 0)) * VEC_ALIGNMENT;
+  int vec_alignment = VEC_ALIGNMENT / sizeof(FP_PRECISION);
+  int num_groups_aligned = (_NUM_GROUPS / vec_alignment +
+                            (_NUM_GROUPS % vec_alignment != 0)) * vec_alignment;
 
   /* Allocate an aligned buffer on the stack */
   FP_PRECISION fsr_flux[num_moments * num_groups_aligned] __attribute__
@@ -984,7 +985,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     else
 #endif
       _ls_solver->tallyLSScalarFlux(curr_segment, next_fsr_id, azim_index, polar_index,
-                                    fsr_flux, fsr_flux_x, fsr_flux_y, 
+                                    fsr_flux, fsr_flux_x, fsr_flux_y,
                                     fsr_flux_z, track_flux, direction);
 
     /* Accumulate contribution of segments to scalar flux before changing fsr */
@@ -1033,7 +1034,7 @@ void TransportSweep::onTrack(Track* track, segment* segments) {
     else
 #endif
       _ls_solver->tallyLSScalarFlux(curr_segment, prev_fsr_id, azim_index, polar_index,
-                                    fsr_flux, fsr_flux_x, fsr_flux_y, 
+                                    fsr_flux, fsr_flux_x, fsr_flux_y,
                                     fsr_flux_z, track_flux, direction);
 
     /* Accumulate contribution of segments to scalar flux before changing fsr */
@@ -1250,7 +1251,7 @@ void ReadSegments::onTrack(Track* track, segment* segments) {
 
 
 /**
- * @brief Constructor for TransportSweepOTF calls the TraverseSegments 
+ * @brief Constructor for TransportSweepOTF calls the TraverseSegments
  *        constructor.
  * @param track_generator Track generator to generate the tracks
  */

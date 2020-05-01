@@ -71,6 +71,7 @@ Solver::Solver(TrackGenerator* track_generator) {
   _is_restart = false;
   _user_fluxes = false;
   _fixed_sources_on = false;
+  _fixed_sources_initialized = false;
   _correct_xs = false;
   _stabilize_transport = false;
   _verbose = false;
@@ -497,6 +498,7 @@ void Solver::setFixedSourceByFSR(long fsr_id, int group, double source) {
                "%d FSRs in the geometry", fsr_id, _num_FSRs);
 
   _fixed_sources_on = true;
+  _fixed_sources_initialized = false;
   _fix_src_FSR_map[std::pair<int, int>(fsr_id, group)] = source;
 }
 
@@ -512,6 +514,7 @@ void Solver::setFixedSourceByFSR(long fsr_id, int group, double source) {
 void Solver::setFixedSourceByCell(Cell* cell, int group, double source) {
 
   _fixed_sources_on = true;
+  _fixed_sources_initialized = false;
 
   /* Recursively add the source to all Cells within a FILL type Cell */
   if (cell->getType() == FILL) {
@@ -539,6 +542,7 @@ void Solver::setFixedSourceByCell(Cell* cell, int group, double source) {
 void Solver::setFixedSourceByMaterial(Material* material, int group,
                                       double source) {
   _fixed_sources_on = true;
+  _fixed_sources_initialized = false;
   _fix_src_material_map[std::pair<Material*, int>(material, group)] = source;
 }
 
@@ -1116,6 +1120,7 @@ void Solver::initializeFixedSources() {
     group = mat_group_key.second;
     source = _fix_src_material_map[mat_group_key];
 
+    /* Search for this Material in all FSRs */
     for (long r=0; r < _num_FSRs; r++) {
       fsr_material = _geometry->findFSRMaterial(r);
       if (mat_group_key.first->getId() == fsr_material->getId())
@@ -1160,7 +1165,8 @@ void Solver::initializeCmfd() {
   _cmfd->setQuadrature(_quad);
   _cmfd->setGeometry(_geometry);
   _cmfd->setAzimSpacings(_quad->getAzimSpacings(), _num_azim);
-  _cmfd->initialize();
+  if (!_is_restart)
+    _cmfd->initialize();
 
 
   TrackGenerator3D* track_generator_3D =
@@ -1578,7 +1584,9 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
 
   /* Clear all timing data from a previous simulation run */
   clearTimerSplits();
-  _num_iterations = 0;
+
+  /* Reset number of iterations, start at 1 if restarting */
+  _num_iterations = _is_restart;
 
   /* Start the timers to record the total solve and initialization times */
   _timer->startTimer();
@@ -1655,15 +1663,12 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
 #endif
 
   /* Create object to track convergence data if requested */
-  ConvergenceData* convergence_data = NULL;
-  if (_verbose) {
-    if (_cmfd != NULL) {
-      convergence_data = new ConvergenceData;
-      _cmfd->setConvergenceData(convergence_data);
-      log_printf(NORMAL, "iter   k-eff   eps-k  eps-MOC   D.R.   "
+  ConvergenceData convergence_data;
+  if (_verbose && _cmfd != NULL) {
+    _cmfd->setConvergenceData(&convergence_data);
+    log_printf(NORMAL, "iter   k-eff   eps-k  eps-MOC   D.R.   "
                "eps-FS1   eps-FSN   #FS  eps-flux1 eps-fluxN"
                "  #FX1 #FXN  MAX P.F.");
-    }
   }
 
   /* Stop timer for solver initialization */
@@ -1696,7 +1701,7 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
 
     /* Solve CMFD diffusion problem and update MOC flux */
     if (_cmfd != NULL && _cmfd->isFluxUpdateOn())
-      _k_eff = _cmfd->computeKeff(i);
+      _k_eff = _cmfd->computeKeff(_num_iterations);
     else
       computeKeff();
 
@@ -1716,17 +1721,17 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
     k_prev = _k_eff;
 
     /* Ouptut iteration report */
-    if (_verbose && convergence_data != NULL) {
+    if (_verbose && _cmfd != NULL) {
 
       /* Unpack convergence data */
-      double pf = convergence_data->pf;
-      double cmfd_res_1 = convergence_data->cmfd_res_1;
-      double cmfd_res_end = convergence_data->cmfd_res_end;
-      double linear_res_1 = convergence_data->linear_res_1;
-      double linear_res_end = convergence_data->linear_res_end;
-      int cmfd_iters = convergence_data->cmfd_iters;
-      int linear_iters_1 = convergence_data->linear_iters_1;
-      int linear_iters_end = convergence_data->linear_iters_end;
+      double pf = convergence_data.pf;
+      double cmfd_res_1 = convergence_data.cmfd_res_1;
+      double cmfd_res_end = convergence_data.cmfd_res_end;
+      double linear_res_1 = convergence_data.linear_res_1;
+      double linear_res_end = convergence_data.linear_res_end;
+      int cmfd_iters = convergence_data.cmfd_iters;
+      int linear_iters_1 = convergence_data.linear_iters_1;
+      int linear_iters_end = convergence_data.linear_iters_end;
       log_printf(NORMAL, "%3d  %1.6f  %5d  %1.6f  %1.3f  %1.6f  %1.6f"
                  "  %3d  %1.6f  %1.6f  %3d  %3d    %.4e", i, _k_eff,
                  dk, residual, dr, cmfd_res_1, cmfd_res_end,
@@ -1757,9 +1762,6 @@ void Solver::computeEigenvalue(int max_iters, residualType res_type) {
 
   _timer->stopTimer();
   _timer->recordSplit("Total time");
-
-  if (convergence_data != NULL)
-    delete convergence_data;
 }
 
 
@@ -1836,7 +1838,28 @@ void Solver::computeInitialFluxGuess(bool is_source_computation) {
  *        code in the source convergence loop.
  */
 void Solver::clearTimerSplits() {
+
+  /* Solver and sweep timers */
   _timer->clearSplit("Total time");
+  _timer->clearSplit("Solver initialization");
+  _timer->clearSplit("Transport Sweep");
+#ifdef MPIx
+  _timer->clearSplit("Total transfer time");
+  _timer->clearSplit("Packing time");
+  _timer->clearSplit("Communication time");
+  _timer->clearSplit("Unpacking time");
+  _timer->clearSplit("Idle time");
+#endif
+
+  /* CMFD timers */
+  _timer->clearSplit("Total CMFD time");
+  _timer->clearSplit("Total collapse time");
+  _timer->clearSplit("Matrix construction time");
+#ifdef MPIx
+  _timer->clearSplit("CMFD MPI communication time");
+#endif
+  _timer->clearSplit("Total solver time");
+  _timer->clearSplit("Total MOC flux update time");
 }
 
 

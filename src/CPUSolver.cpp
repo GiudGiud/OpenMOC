@@ -246,7 +246,8 @@ void CPUSolver::resetFixedSources() {
     mat_iter->second = 0;
 
   /* Reset array of fixed sources */
-  memset(_fixed_sources, 0, _num_FSRs * _NUM_GROUPS * sizeof(FP_PRECISION));
+  if (_fixed_sources != NULL)
+    memset(_fixed_sources, 0, _num_FSRs * _NUM_GROUPS * sizeof(FP_PRECISION));
 }
 
 
@@ -391,14 +392,14 @@ void CPUSolver::initializeSourceArrays() {
   /* Delete old sources arrays if they exist */
   if (_reduced_sources != NULL)
     delete [] _reduced_sources;
-  if (_fixed_sources != NULL)
+  if (_fixed_sources != NULL && !_fixed_sources_initialized)
     delete [] _fixed_sources;
 
   long size = _num_FSRs * _NUM_GROUPS;
 
   /* Allocate memory for all source arrays */
   _reduced_sources = new FP_PRECISION[size]();
-  if (_fixed_sources_on)
+  if (_fixed_sources_on && !_fixed_sources_initialized)
     _fixed_sources = new FP_PRECISION[size]();
 
   long max_size = size;
@@ -415,7 +416,7 @@ void CPUSolver::initializeSourceArrays() {
              max_size_mb);
 
   /* Populate fixed source array with any user-defined sources */
-  if (_fixed_sources_on)
+  if (_fixed_sources_on && !_fixed_sources_initialized)
     initializeFixedSources();
 }
 
@@ -451,6 +452,9 @@ void CPUSolver::initializeFixedSources() {
 
     _fixed_sources(fsr_id, group-1) = _fix_src_FSR_map[fsr_group_key];
   }
+
+  /* Remember initialization to avoid re-initializing unless it's necessary */
+  _fixed_sources_initialized = true;
 }
 
 
@@ -2306,7 +2310,6 @@ void CPUSolver::transportSweep() {
  *          scalar flux, and updates the Track's angular flux.
  * @param curr_segment a pointer to the Track segment of interest
  * @param azim_index azimuthal angle index for this segment
- * @param polar_index polar angle index for this segment
  * @param fsr_flux buffer to store the contribution to the region's scalar flux
  * @param track_flux a pointer to the Track's angular flux
  */
@@ -2387,7 +2390,7 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, long next_fsr_id,
   }
   else {
 //FIXME: Implement strip mining for the 2D flat source solver
-    ExpEvaluator* exp_evaluator = _exp_evaluators[azim_index][polar_index];
+    ExpEvaluator* exp_evaluator = _exp_evaluators[azim_index][0];
     const int num_polar_2 = _num_polar / 2;
 
     /* Compute tau in advance to simplify attenuation loop */
@@ -2443,7 +2446,7 @@ void CPUSolver::tallyScalarFlux(segment* curr_segment, long next_fsr_id,
       for (int p=0; p < num_polar_2; p++) {
         FP_PRECISION wgt = _quad->getWeightInline(azim_index, p);
 #pragma omp simd
-        for (int e=0; e < _num_groups; e++) 
+        for (int e=0; e < _num_groups; e++)
           _tallied_currents[df_index+p][e] += wgt * track_flux[p*_num_groups + e] / _df[df_index + p][e];
       }
       omp_unset_lock(&_FSR_locks[fsr_id]);

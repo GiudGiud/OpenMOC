@@ -4376,11 +4376,13 @@ void Cmfd::printTimerReport() {
   msg_string.resize(53, '.');
   log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), matrix_construction_time);
 
+#ifdef MPIx
   /* Get the MPI communication time */
   double comm_time = _timer->getSplit("CMFD MPI communication time");
   msg_string = "    MPI communication time";
   msg_string.resize(53, '.');
   log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), comm_time);
+#endif
 
   /* Get the total solver time */
   double solver_time = _timer->getSplit("Total solver time");
@@ -5593,4 +5595,20 @@ void Cmfd::printCmfdCellSizes() {
   for (i=0; i<_num_z+1; i++)
     printf("i=%d, %f; ",i, _accumulate_z[i]);
   printf("\n");
+}
+
+
+/**
+ * @brief Create a string with information about the CMFD solver.
+ * @details For pretty printing in Python API
+ */
+std::string Cmfd::toString() {
+
+  std::stringstream message;
+  message << "CMFD acceleration at " << (void*)this << std::endl;
+  message << "Mesh in XYZ: [" << _num_x << ", " << _num_y << ", " << _num_z;
+  message << "]" << std::endl;
+  message << "Condensing " << _num_moc_groups << " MOC groups to " <<
+             _num_cmfd_groups << " CMFD groups";
+  return message.str();
 }
