@@ -92,6 +92,7 @@ Solver::Solver(TrackGenerator* track_generator) {
   _use_DF = 0;
   _start_keff = 1.;
   _start_DF = 0;
+  _df_use_ids = true;
 }
 
 /**
@@ -2801,6 +2802,11 @@ FP_PRECISION Solver::getDiscontinuityFactor(int surface_index, int polar_index,
 }
 
 
+void Solver::setDFmapping(bool df_use_ids) {
+  _df_use_ids = df_use_ids;
+}
+
+
 /**
  * @brief Get the index into the DF array
  * @param fsr_id current segment fsr
@@ -2810,15 +2816,12 @@ FP_PRECISION Solver::getDiscontinuityFactor(int surface_index, int polar_index,
 int Solver::getDfIndex(int fsr_id, int next_fsr_id, int polar_index) {
   //std::cout << "FSR " << fsr_id << " next " << next_fsr_id << std::endl;
 
-  /* Match fsrs to a cell, as DFs are stored as cell to cell */
-  //std::string cell_from = _fsr_to_cells->find(fsr_id)->second->getName();
-  //std::string cell_to = _fsr_to_cells->find(next_fsr_id)->second->getName();
-
   /* DFs are only for cell types right now, to use different DFs per cell couples,
      switch the lookup to use cell ids rather than cell names */
-   // Per id or parent id
-   std::string cell_from;
-   std::string cell_to;
+  // Per id or parent id
+  std::string cell_from;
+  std::string cell_to;
+  if (_df_use_ids) {
    if (_fsr_to_cells->find(fsr_id)->second->getParent() == NULL)
      cell_from = std::to_string(_fsr_to_cells->find(fsr_id)->second->getId());
    else
@@ -2828,7 +2831,11 @@ int Solver::getDfIndex(int fsr_id, int next_fsr_id, int polar_index) {
      cell_to = std::to_string(_fsr_to_cells->find(next_fsr_id)->second->getId());
    else
      cell_to = std::to_string(_fsr_to_cells->find(next_fsr_id)->second->getParent()->getId());
-
+  }
+  else {
+    cell_from = _fsr_to_cells->find(fsr_id)->second->getName();
+    cell_to = _fsr_to_cells->find(next_fsr_id)->second->getName();
+  }
 
   //log_printf(NORMAL, "Key %s -> %s", cell_from.c_str(), cell_to.c_str());
   int df_index = -1;
