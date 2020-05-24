@@ -1929,8 +1929,7 @@ void CPUSolver::computeFSRSources(int iteration) {
     }
 
     /* Output negative sources for debugging */
-    //if (get_log_level() == DEBUG && _cmfd != NULL)
-    if (_num_iterations > 6 && _cmfd != NULL)
+    if ((_print_negative_sources || get_log_level() == DEBUG) && _cmfd != NULL)
       printNegativeSources(_num_iterations, _cmfd->getNumX(), _cmfd->getNumY(),
                            _cmfd->getNumZ());
   }
