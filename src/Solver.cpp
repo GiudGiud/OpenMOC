@@ -93,7 +93,7 @@ Solver::Solver(TrackGenerator* track_generator) {
   _use_DF = 0;
   _start_keff = 1.;
   _start_DF = 0;
-  _df_use_ids = true;
+  _df_mapping = "cell_ids";
 }
 
 /**
@@ -2770,6 +2770,13 @@ void Solver::loadDFFromFile(std::string filename, int num_surfaces){
       if (_SOLVE_3D)
         _df.at(1 + s*_num_polar + (_num_polar - 1 - p)).at(g) = _df.at(1 + s*_num_polar + p).at(g);
 
+      // Disable outside of resonances
+      if (g < 12 || g > 27) {
+        _df.at(1 + s*num_polar + p).at(g) = 1;
+        if (_SOLVE_3D)
+          _df.at(1 + s*_num_polar + (_num_polar - 1 - p)).at(g) = 1;
+      }
+
       last = next + 1;
       g++;
     }
@@ -2812,8 +2819,13 @@ FP_PRECISION Solver::getDiscontinuityFactor(int surface_index, int polar_index,
 }
 
 
-void Solver::setDFmapping(bool df_use_ids) {
-  _df_use_ids = df_use_ids;
+void Solver::setDFmapping(std::string df_mapping) {
+  if (df_mapping.compare("material_ids") != 0 &&
+      df_mapping.compare("cell_ids") != 0 &&
+      df_mapping.compare("cell_names") != 0)
+    log_printf(ERROR, "DF mapping is not recognized %s", &df_mapping[0]);
+
+  _df_mapping = df_mapping;
 }
 
 
@@ -2831,7 +2843,7 @@ int Solver::getDfIndex(int fsr_id, int next_fsr_id, int polar_index) {
   // Per id or parent id
   std::string cell_from;
   std::string cell_to;
-  if (_df_use_ids) {
+  if (_df_mapping.compare("cell_ids") == 0) {
    if (_fsr_to_cells->find(fsr_id)->second->getParent() == NULL)
      cell_from = std::to_string(_fsr_to_cells->find(fsr_id)->second->getId());
    else
@@ -2842,9 +2854,13 @@ int Solver::getDfIndex(int fsr_id, int next_fsr_id, int polar_index) {
    else
      cell_to = std::to_string(_fsr_to_cells->find(next_fsr_id)->second->getParent()->getId());
   }
-  else {
+  else if (_df_mapping.compare("cell_names") == 0) {
     cell_from = _fsr_to_cells->find(fsr_id)->second->getName();
     cell_to = _fsr_to_cells->find(next_fsr_id)->second->getName();
+  }
+  else if (_df_mapping.compare("material_ids") == 0) {
+    cell_from = std::to_string(_FSR_materials[fsr_id]->getId());
+    cell_to = std::to_string(_FSR_materials[next_fsr_id]->getId());
   }
 
   //log_printf(NORMAL, "Key %s -> %s", cell_from.c_str(), cell_to.c_str());

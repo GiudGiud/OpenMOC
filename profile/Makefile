@@ -32,7 +32,7 @@ CMFD_PRECISION ?= single
 #case ?= models/assembly_3e/load-assembly.cpp
 #case ?= models/core_2d/load-core.cpp
 #case ?= models/assembly_2a/load-assembly_df.cpp
-case ?= models/core_2d_0/load-core_df.cpp
+case ?= models/core_2d_01/load-core_df.cpp
 
 source = \
 Cell.cpp \
