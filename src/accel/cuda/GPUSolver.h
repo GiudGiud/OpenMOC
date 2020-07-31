@@ -68,6 +68,9 @@
  *  array at the beginning of each transport sweep */
 #define start_flux(t,pe2) (start_flux[2*(t)*polar_times_groups+(pe2)])
 
+/** Indexing macro for the CMFD cell currents */
+#define surface_currents(c_id,s_id,e) (surface_currents[c_id*_num_cmfd_groups*NUM_FACES+s_id*_num_cmfd_groups+e])
+
 /**
  * @class GPUSolver GPUSolver.h "openmoc/src/dev/gpu/GPUSolver.h"
  * @brief This a subclass of the Solver class for NVIDIA Graphics
@@ -118,6 +121,11 @@ private:
   /** Thrust vector of source / sigma_t in each FSR */
   thrust::device_vector<FP_PRECISION> _reduced_sources;
 
+  /** Thrust vector of CMFD surface currents */
+  thrust::device_vector<CMFD_PRECISION> _surface_currents;
+  int _num_cmfd_cells;
+  int _num_cmfd_groups;
+
   /** Map of Material IDs to indices in _materials array */
   std::map<int, int> _material_IDs_to_indices;
 
@@ -153,6 +161,7 @@ public:
   void initializeSourceArrays() override;
   void initializeFixedSources() override;
   void initializeCmfd() override;
+  void initializeCurrents();
 
   void zeroTrackFluxes();
   void flattenFSRFluxes(FP_PRECISION value);

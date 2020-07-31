@@ -1173,7 +1173,6 @@ void Solver::initializeCmfd() {
   if (!_is_restart)
     _cmfd->initialize();
 
-
   TrackGenerator3D* track_generator_3D =
     dynamic_cast<TrackGenerator3D*>(_track_generator);
   if (track_generator_3D != NULL)

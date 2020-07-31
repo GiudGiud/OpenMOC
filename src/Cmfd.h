@@ -596,7 +596,7 @@ inline void Cmfd::tallyCurrent(segment* curr_segment, float* track_flux,
     int local_cell_id = getLocalCMFDCell(cell_id);
 
     if (_SOLVE_3D) {
-      double wgt = _quadrature->getWeightInline(azim_index, polar_index);
+      FP_PRECISION wgt = _quadrature->getWeightInline(azim_index, polar_index);
       for (int e=0; e < _num_moc_groups; e++) {
 
         /* Get the CMFD group */

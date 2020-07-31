@@ -513,6 +513,115 @@ __device__ void tallyScalarFlux(dev_segment* curr_segment,
 
 
 /**
+ * @brief Tallies the current contribution from this segment across the
+ *        the appropriate CMFD mesh cell surface.
+ * @param curr_segment a pointer to the Track segment of interest
+ * @param azim_index the azimuthal index for this segment
+ * @param polar_index the polar index for this segmenbt
+ * @param track_flux a pointer to the Track's angular flux
+ * @param fwd boolean indicating direction of integration along segment
+ */
+__device__ void tallyCurrent(segment* curr_segment, int azim_index,
+                             int polar_index, float* track_flux, bool fwd) {
+
+  int surf_id, cell_id, cmfd_group;
+
+  /* Check if the current needs to be tallied */
+  bool tally_current = false;
+  if (curr_segment->_cmfd_surface_fwd != -1 && fwd) {
+   surf_id = curr_segment->_cmfd_surface_fwd % NUM_SURFACES;
+   cell_id = curr_segment->_cmfd_surface_fwd / NUM_SURFACES;
+   tally_current = true;
+  }
+  else if (curr_segment->_cmfd_surface_bwd != -1 && !fwd) {
+   surf_id = curr_segment->_cmfd_surface_bwd % NUM_SURFACES;
+   cell_id = curr_segment->_cmfd_surface_bwd / NUM_SURFACES;
+   tally_current = true;
+  }
+
+  /* Tally current if necessary */
+  if (tally_current) {
+
+    int local_cell_id = _cmfd->getLocalCMFDCell(cell_id);
+
+    FP_PRECISION wgt = weights(azim_index,p);
+
+    /* Get the CMFD group */
+    cmfd_group = _cmfd->getCmfdGroup(e);
+
+    /* Increment currents on faces */
+    if (surf_id < NUM_FACES) {
+      atomicAdd(&_surface_currents(local_cell_id,surf_id,cmfd_group),
+                wgt * track_flux[e]);
+    }
+    //NOTE Only vacuum BC implemented
+    //NOTE Currents do not traverse to the next cell like in CPU Cmfd
+    /* Increment currents on corners directly on faces */
+    else if (surf_id < NUM_FACES + NUM_EDGES) {
+
+      /* Get direction from surface index */
+      int direction[3];
+      surf_id -= NUM_FACES;
+      int group = surf_id / 4;
+      int skipped = 2 - group;
+      surf_id = surf_id % 4;
+      int ind[2];
+      ind[0] = surf_id % 2;
+      ind[1] = (surf_id - ind[0]) / 2;
+      int n = 0;
+      for (int i=0; i < 3; i++) {
+        if (i != skipped) {
+          direction[i] = 2 * ind[n] - 1;
+          n++;
+        }
+      }
+
+      /* Get surface indices from direction */
+      int k = 0;
+      int surf[2];
+      surf[0] = 0;
+      surf[1] = 0;
+      for (int i=0; i<3; i++) {
+        surf[k] = surf[k] +
+             std::abs(direction[i]) * (3 * (direction[i] + 1) / 2 + i);
+        k += (std::abs(direction[i]) != 0);
+      }
+
+      atomicAdd(&_surface_currents(local_cell_id,surf[0],cmfd_group),
+                wgt * track_flux[e]);
+      atomicAdd(&_surface_currents(local_cell_id,surf[1],cmfd_group),
+                wgt * track_flux[e]);
+    }
+    /* Increment currents on corners directly on faces */
+    else {
+
+      /* Get direction from surface id */
+      int direction[3];
+      direction[0] = 2 * (surf_id / 4) - 1;
+      direction[1] = 2 * ((surf_id / 2) % 2) - 1;
+      direction[2] = 2 * (surf_id % 2) - 1;
+
+      //TODO Try to convert this to a loop, see if faster
+      //TODO Move this out of if condition (make a for loop with length based
+      // on surf_id)
+      /* Get faces ids from the direction */
+      int surf_x = std::abs(direction[0]) * (3 * (direction[0] + 1) / 2);
+      int surf_y = std::abs(direction[1]) * (3 * (direction[1] + 1) / 2 + 1);
+      int surf_z = std::abs(direction[2]) * (3 * (direction[2] + 1) / 2 + 2);
+
+      /* Increment currents */
+      atomicAdd(&_surface_currents(local_cell_id,surf_x,cmfd_group),
+                wgt * track_flux[e]);
+      atomicAdd(&_surface_currents(local_cell_id,surf_y,cmfd_group),
+                wgt * track_flux[e]);
+      atomicAdd(&_surface_currents(local_cell_id,surf_z,cmfd_group),
+                wgt * track_flux[e]);
+    }
+  }
+}
+
+
+/**
  * @brief Updates the boundary flux for a Track given boundary conditions.
  * @details For reflective and periodic boundary conditions, the outgoing
  *          boundary flux for the Track is given to the corresponding reflecting
@@ -628,6 +737,9 @@ __global__ void transportSweepOnDevice(FP_PRECISION* scalar_flux,
                       track_flux, reduced_sources, scalar_flux);
     }
 
+    /* Tally the current for CMFD */
+    tallyCurrent(curr_segment, azim_index, polar_index, track_flux, true);
+
     /* Transfer boundary angular flux to outgoing Track */
     transferBoundaryFlux(curr_track, azim_index, track_flux, start_flux,
                          energy_angle_index, true);
@@ -640,6 +752,9 @@ __global__ void transportSweepOnDevice(FP_PRECISION* scalar_flux,
       tallyScalarFlux(curr_segment, azim_index, energy_group, materials,
                       track_flux, reduced_sources, scalar_flux);
     }
+
+    /* Tally the current for CMFD */
+    tallyCurrent(curr_segment, azim_index, polar_index, track_flux, false);
 
     /* Transfer boundary angular flux to outgoing Track */
     transferBoundaryFlux(curr_track, azim_index, track_flux, start_flux,
@@ -1018,7 +1133,7 @@ void GPUSolver::setGeometry(Geometry* geometry) {
 
   Solver::setGeometry(geometry);
 
-  std::map<int, Material*> host_materials=_geometry->getAllMaterials();
+  std::map<int, Material*> host_materials = _geometry->getAllMaterials();
   std::map<int, Material*>::iterator iter;
   int material_index = 0;
 
@@ -1156,8 +1271,12 @@ void GPUSolver::initializeExpEvaluators() {}
 void GPUSolver::initializeCmfd() {
   /* Raise an error only if CMFD was attempted to be set.
      Otherwise this fails every time. */
-  if (_cmfd != NULL)
-    log_printf(ERROR, "CMFD not implemented for GPUSolver yet. Get to work!");
+  //if (_cmfd != NULL)
+  //  log_printf(ERROR, "CMFD not implemented for GPUSolver yet. Get to work!");
+
+  _num_cmfd_groups = _cmfd->getNumCmfdGroups();
+  _num_cmfd_cells = _cmfd->getNumCells();
+  initializeCurrents();
 }
 
 
@@ -1292,7 +1411,7 @@ void GPUSolver::initializeMaterials(solverMode mode) {
      * on the device */
     cudaMalloc(&_materials, _num_materials * sizeof(dev_material));
     getLastCudaError();
-    
+
     for (iter=host_materials.begin(); iter != host_materials.end(); ++iter) {
       clone_material(iter->second, &_materials[material_index]);
 
@@ -1440,6 +1559,14 @@ void GPUSolver::initializeFixedSources() {
 
     _fixed_sources(fsr_id, group-1) = _fix_src_FSR_map[fsr_group_key];
   }
+}
+
+
+/**
+ * @brief Initializes CMFD surface currents Vector prior to first MOC iteration.
+ */
+void GPUSolver::initializeCurrents() {
+  _surface_currents.resize(_num_cmfd_cells * _num_cmfd_groups * NUM_FACES);
 }
 
 
