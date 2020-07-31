@@ -39,6 +39,7 @@
 #ifdef NGROUPS
 #define NUM_GROUPS (NGROUPS)
 #define _NUM_GROUPS (NGROUPS)
+#define MAX_NUM_GROUPS_GPU (NGROUPS)
 #else
 #define _NUM_GROUPS (_num_groups)
 #endif
@@ -69,7 +70,7 @@
 #define start_flux(t,pe2) (start_flux[2*(t)*polar_times_groups+(pe2)])
 
 /** Indexing macro for the CMFD cell currents */
-#define surface_currents(c_id,s_id,e) (surface_currents[c_id*_num_cmfd_groups*NUM_FACES+s_id*_num_cmfd_groups+e])
+#define surface_currents(c_id,s_id,e) (surface_currents[c_id*num_cmfd_groups*NUM_FACES+s_id*num_cmfd_groups+e])
 
 /**
  * @class GPUSolver GPUSolver.h "openmoc/src/dev/gpu/GPUSolver.h"
@@ -137,11 +138,6 @@ public:
   virtual ~GPUSolver();
 
   int getNumThreadBlocks();
-
-  /**
-   * @brief Returns the number of threads per block to execute on the GPU.
-   * @return the number of threads per block
-   */
   int getNumThreadsPerBlock();
   double getFSRSource(long fsr_id, int group) override;
   double getFlux(long fsr_id, int group) override;
@@ -161,7 +157,6 @@ public:
   void initializeSourceArrays() override;
   void initializeFixedSources() override;
   void initializeCmfd() override;
-  void initializeCurrents();
 
   void zeroTrackFluxes();
   void flattenFSRFluxes(FP_PRECISION value);

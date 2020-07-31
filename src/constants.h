@@ -163,6 +163,9 @@
 /** The maximum number of azimuthal angles to reserve constant memory on GPU */
 #define MAX_AZIM_ANGLES_GPU 256
 
+/** The maximum number of energy groups for MOC-CMFD mapping on GPU */
+#define MAX_NUM_GROUPS_GPU 512
+
 #endif
 
 #endif /* CONSTANTS_H_ */

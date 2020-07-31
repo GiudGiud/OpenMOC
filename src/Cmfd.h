@@ -433,6 +433,7 @@ public:
   int getNumMOCGroups();
   int getNumCells();
   int getCmfdGroup(int group);
+  int* getCmfdGroupMap();
   int getBoundary(int side);
   Lattice* getLattice();
   int getNumX();

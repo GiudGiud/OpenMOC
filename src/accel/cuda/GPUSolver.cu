@@ -17,6 +17,12 @@ __constant__ int num_polar_2;
 /** The number of polar angles times energy groups */
 __constant__ int polar_times_groups;
 
+/** The number of CMFD groups */
+__constant__ int num_cmfd_groups;
+
+/** The map from MOC to CMFD groups */
+__constant__ int cmfd_group_map[MAX_NUM_GROUPS_GPU];
+
 /** An array for the sines of the polar angle in the Quadrature set */
 __constant__ FP_PRECISION sin_thetas[MAX_POLAR_ANGLES_GPU];
 
@@ -515,14 +521,19 @@ __device__ void tallyScalarFlux(dev_segment* curr_segment,
 /**
  * @brief Tallies the current contribution from this segment across the
  *        the appropriate CMFD mesh cell surface.
+ * @param surface_currents an on-device array to accumulate the surface currents
  * @param curr_segment a pointer to the Track segment of interest
  * @param azim_index the azimuthal index for this segment
- * @param polar_index the polar index for this segmenbt
+ * @param energy_group the energy group index
  * @param track_flux a pointer to the Track's angular flux
  * @param fwd boolean indicating direction of integration along segment
  */
-__device__ void tallyCurrent(segment* curr_segment, int azim_index,
-                             int polar_index, float* track_flux, bool fwd) {
+__device__ void tallyCurrent(CMFD_PRECISION* surface_currents,
+                             dev_segment* curr_segment,
+                             int azim_index,
+                             int energy_group,
+                             float* track_flux,
+                             bool fwd) {
 
   int surf_id, cell_id, cmfd_group;
 
@@ -542,80 +553,83 @@ __device__ void tallyCurrent(segment* curr_segment, int azim_index,
   /* Tally current if necessary */
   if (tally_current) {
 
-    int local_cell_id = _cmfd->getLocalCMFDCell(cell_id);
-
-    FP_PRECISION wgt = weights(azim_index,p);
+    int local_cell_id = cell_id;
+    //TODO Domain decomposition: _cmfd->getLocalCMFDCell(cell_id);
 
     /* Get the CMFD group */
-    cmfd_group = _cmfd->getCmfdGroup(e);
+    cmfd_group = cmfd_group_map[energy_group];
 
-    /* Increment currents on faces */
-    if (surf_id < NUM_FACES) {
-      atomicAdd(&_surface_currents(local_cell_id,surf_id,cmfd_group),
-                wgt * track_flux[e]);
-    }
-    //NOTE Only vacuum BC implemented
-    //NOTE Currents do not traverse to the next cell like in CPU Cmfd
-    /* Increment currents on corners directly on faces */
-    else if (surf_id < NUM_FACES + NUM_EDGES) {
+    for (int p=0; p < num_polar_2; p++) {
+      FP_PRECISION wgt = weights(azim_index,p);
 
-      /* Get direction from surface index */
-      int direction[3];
-      surf_id -= NUM_FACES;
-      int group = surf_id / 4;
-      int skipped = 2 - group;
-      surf_id = surf_id % 4;
-      int ind[2];
-      ind[0] = surf_id % 2;
-      ind[1] = (surf_id - ind[0]) / 2;
-      int n = 0;
-      for (int i=0; i < 3; i++) {
-        if (i != skipped) {
-          direction[i] = 2 * ind[n] - 1;
-          n++;
+      /* Increment currents on faces */
+      if (surf_id < NUM_FACES) {
+        atomicAdd(&surface_currents(local_cell_id,surf_id,cmfd_group),
+                  wgt * track_flux[p]);
+      }
+      //NOTE Only vacuum BC implemented
+      //NOTE Currents do not traverse to the next cell like in CPU Cmfd
+      /* Increment currents on corners directly on faces */
+      else if (surf_id < NUM_FACES + NUM_EDGES) {
+
+        /* Get direction from surface index */
+        int direction[3];
+        surf_id -= NUM_FACES;
+        int group = surf_id / 4;
+        int skipped = 2 - group;
+        surf_id = surf_id % 4;
+        int ind[2];
+        ind[0] = surf_id % 2;
+        ind[1] = (surf_id - ind[0]) / 2;
+        int n = 0;
+        for (int i=0; i < 3; i++) {
+          if (i != skipped) {
+            direction[i] = 2 * ind[n] - 1;
+            n++;
+          }
         }
+
+        /* Get surface indices from direction */
+        int k = 0;
+        int surf[2];
+        surf[0] = 0;
+        surf[1] = 0;
+        for (int i=0; i<3; i++) {
+          surf[k] = surf[k] +
+               std::abs(direction[i]) * (3 * (direction[i] + 1) / 2 + i);
+          k += (std::abs(direction[i]) != 0);
+        }
+
+        atomicAdd(&surface_currents(local_cell_id,surf[0],cmfd_group),
+                  wgt * track_flux[p]);
+        atomicAdd(&surface_currents(local_cell_id,surf[1],cmfd_group),
+                  wgt * track_flux[p]);
       }
+      /* Increment currents on corners directly on faces */
+      else {
 
-      /* Get surface indices from direction */
-      int k = 0;
-      int surf[2];
-      surf[0] = 0;
-      surf[1] = 0;
-      for (int i=0; i<3; i++) {
-        surf[k] = surf[k] +
-             std::abs(direction[i]) * (3 * (direction[i] + 1) / 2 + i);
-        k += (std::abs(direction[i]) != 0);
+        /* Get direction from surface id */
+        int direction[3];
+        direction[0] = 2 * (surf_id / 4) - 1;
+        direction[1] = 2 * ((surf_id / 2) % 2) - 1;
+        direction[2] = 2 * (surf_id % 2) - 1;
+
+        //TODO Try to convert this to a loop, see if faster
+        //TODO Move this out of if condition (make a for loop with length based
+        // on surf_id)
+        /* Get faces ids from the direction */
+        int surf_x = std::abs(direction[0]) * (3 * (direction[0] + 1) / 2);
+        int surf_y = std::abs(direction[1]) * (3 * (direction[1] + 1) / 2 + 1);
+        int surf_z = std::abs(direction[2]) * (3 * (direction[2] + 1) / 2 + 2);
+
+        /* Increment currents */
+        atomicAdd(&surface_currents(local_cell_id,surf_x,cmfd_group),
+                  wgt * track_flux[p]);
+        atomicAdd(&surface_currents(local_cell_id,surf_y,cmfd_group),
+                  wgt * track_flux[p]);
+        atomicAdd(&surface_currents(local_cell_id,surf_z,cmfd_group),
+                  wgt * track_flux[p]);
       }
-
-      atomicAdd(&_surface_currents(local_cell_id,surf[0],cmfd_group),
-                wgt * track_flux[e]);
-      atomicAdd(&_surface_currents(local_cell_id,surf[1],cmfd_group),
-                wgt * track_flux[e]);
-    }
-    /* Increment currents on corners directly on faces */
-    else {
-
-      /* Get direction from surface id */
-      int direction[3];
-      direction[0] = 2 * (surf_id / 4) - 1;
-      direction[1] = 2 * ((surf_id / 2) % 2) - 1;
-      direction[2] = 2 * (surf_id % 2) - 1;
-
-      //TODO Try to convert this to a loop, see if faster
-      //TODO Move this out of if condition (make a for loop with length based
-      // on surf_id)
-      /* Get faces ids from the direction */
-      int surf_x = std::abs(direction[0]) * (3 * (direction[0] + 1) / 2);
-      int surf_y = std::abs(direction[1]) * (3 * (direction[1] + 1) / 2 + 1);
-      int surf_z = std::abs(direction[2]) * (3 * (direction[2] + 1) / 2 + 2);
-
-      /* Increment currents */
-      atomicAdd(&_surface_currents(local_cell_id,surf_x,cmfd_group),
-                wgt * track_flux[e]);
-      atomicAdd(&_surface_currents(local_cell_id,surf_y,cmfd_group),
-                wgt * track_flux[e]);
-      atomicAdd(&_surface_currents(local_cell_id,surf_z,cmfd_group),
-                wgt * track_flux[e]);
     }
   }
 }
@@ -687,6 +701,7 @@ __global__ void transportSweepOnDevice(FP_PRECISION* scalar_flux,
                                        FP_PRECISION* boundary_flux,
                                        FP_PRECISION* start_flux,
                                        FP_PRECISION* reduced_sources,
+                                       CMFD_PRECISION* surface_currents,
                                        dev_material* materials,
                                        dev_track* tracks,
                                        long tid_offset,
@@ -738,7 +753,8 @@ __global__ void transportSweepOnDevice(FP_PRECISION* scalar_flux,
     }
 
     /* Tally the current for CMFD */
-    tallyCurrent(curr_segment, azim_index, polar_index, track_flux, true);
+    tallyCurrent(surface_currents, curr_segment, azim_index,
+                 energy_group, track_flux, true);
 
     /* Transfer boundary angular flux to outgoing Track */
     transferBoundaryFlux(curr_track, azim_index, track_flux, start_flux,
@@ -754,7 +770,8 @@ __global__ void transportSweepOnDevice(FP_PRECISION* scalar_flux,
     }
 
     /* Tally the current for CMFD */
-    tallyCurrent(curr_segment, azim_index, polar_index, track_flux, false);
+    tallyCurrent(surface_currents, curr_segment, azim_index,
+                 energy_group, track_flux, false);
 
     /* Transfer boundary angular flux to outgoing Track */
     transferBoundaryFlux(curr_track, azim_index, track_flux, start_flux,
@@ -1274,9 +1291,26 @@ void GPUSolver::initializeCmfd() {
   //if (_cmfd != NULL)
   //  log_printf(ERROR, "CMFD not implemented for GPUSolver yet. Get to work!");
 
+  /* For array allocation (delete when moved) */
   _num_cmfd_groups = _cmfd->getNumCmfdGroups();
   _num_cmfd_cells = _cmfd->getNumCells();
-  initializeCurrents();
+
+  /* Pass size of CMFD arrays to device */
+  cudaMemcpyToSymbol(num_cmfd_groups, &_num_cmfd_groups, sizeof(int));
+  getLastCudaError();
+
+  /* Pass mapping of MOC to CMFD groups to device */
+  if (_NUM_GROUPS > MAX_NUM_GROUPS_GPU)
+    log_printf(ERROR, "GPU CMFD may not be used with more than %d energy groups"
+               ", recompile with a higher MAX_NUM_GROUPS_GPU.",
+               MAX_NUM_GROUPS_GPU);
+  cudaMemcpyToSymbol(cmfd_group_map, _cmfd->getCmfdGroupMap() ,
+                     _NUM_GROUPS * sizeof(int));
+  getLastCudaError();
+
+  _surface_currents.resize(_num_cmfd_cells * _num_cmfd_groups * NUM_FACES);
+
+  //initializeCurrents();
 }
 
 
@@ -1563,14 +1597,6 @@ void GPUSolver::initializeFixedSources() {
 
 
 /**
- * @brief Initializes CMFD surface currents Vector prior to first MOC iteration.
- */
-void GPUSolver::initializeCurrents() {
-  _surface_currents.resize(_num_cmfd_cells * _num_cmfd_groups * NUM_FACES);
-}
-
-
-/**
  * @brief Zero each Track's boundary fluxes for each energy group and polar
  *        angle in the "forward" and "reverse" directions.
  */
@@ -1767,6 +1793,8 @@ void GPUSolver::transportSweep() {
        thrust::raw_pointer_cast(&_start_flux[0]);
   FP_PRECISION* reduced_sources =
        thrust::raw_pointer_cast(&_reduced_sources[0]);
+  CMFD_PRECISION* surface_currents =
+       thrust::raw_pointer_cast(&_surface_currents[0]);
 
   log_printf(DEBUG, "Obtained device pointers to thrust vectors.\n");
 
@@ -1785,8 +1813,9 @@ void GPUSolver::transportSweep() {
   _timer->startTimer();
   transportSweepOnDevice<<<_B, _T, shared_mem>>>(scalar_flux, boundary_flux,
                                                  start_flux, reduced_sources,
-                                                 _materials, _dev_tracks,
-                                                 0, _tot_num_tracks);
+                                                 surface_currents, _materials,
+                                                 _dev_tracks, 0,
+                                                 _tot_num_tracks);
 
   cudaDeviceSynchronize();
   getLastCudaError();

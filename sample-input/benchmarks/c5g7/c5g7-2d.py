@@ -4,7 +4,7 @@ import openmoc.plotter as plotter
 from openmoc.options import Options
 from lattices import lattices, universes, cells, surfaces
 
-use_gpu = False
+use_gpu = True
 
 if use_gpu:
     from openmoc.cuda import GPUSolver

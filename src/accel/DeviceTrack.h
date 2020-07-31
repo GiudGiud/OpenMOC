@@ -30,6 +30,10 @@ struct dev_segment {
 
   /** The ID for flat source region in which this segment resides */
   int _region_uid;
+
+  /* The index of the CMFD surface, if any, at both ends of the segment */
+  int _cmfd_surface_fwd;
+  int _cmfd_surface_bwd;
 };
 
 

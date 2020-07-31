@@ -1973,6 +1973,14 @@ void Cmfd::initializeGroupMap() {
   }
 }
 
+/**
+ * @brief Return the map from MOC to CMFD groups.
+ * @return The index map from MOC to CMFD groups.
+ */
+int* Cmfd::getCmfdGroupMap() {
+  return _group_indices_map;
+}
+
 
 /**
  * @brief Find the CMFD surface that a LocalCoords object lies on.
