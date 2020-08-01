@@ -4,7 +4,7 @@ import openmoc.plotter as plotter
 from openmoc.options import Options
 from lattices import lattices, universes, cells, surfaces
 
-use_gpu = True
+use_gpu = False
 
 if use_gpu:
     from openmoc.cuda import GPUSolver
@@ -45,15 +45,14 @@ cells['Root'].setFill(lattices['Root'])
 ##########################     Creating Cmfd mesh    ##########################
 ###############################################################################
 
-if not use_gpu:
-    log.py_printf('NORMAL', 'Creating Cmfd mesh...')
+log.py_printf('NORMAL', 'Creating Cmfd mesh...')
 
-    cmfd = openmoc.Cmfd()
-    cmfd.setSORRelaxationFactor(1.5)
-    cmfd.setLatticeStructure(51,51)
-    cmfd.setGroupStructure([[1,2,3], [4,5,6,7]])
-    cmfd.setCentroidUpdateOn(True)
-    cmfd.setKNearest(3)
+cmfd = openmoc.Cmfd()
+cmfd.setSORRelaxationFactor(1.5)
+cmfd.setLatticeStructure(51,51)
+cmfd.setGroupStructure([[1,2,3], [4,5,6,7]])
+cmfd.setCentroidUpdateOn(True)
+cmfd.setKNearest(3)
 
 ###############################################################################
 ##########################   Creating the Geometry   ##########################
@@ -63,8 +62,7 @@ log.py_printf('NORMAL', 'Creating geometry...')
 
 geometry = openmoc.Geometry()
 geometry.setRootUniverse(universes['Root'])
-if not use_gpu:
-    geometry.setCmfd(cmfd)
+geometry.setCmfd(cmfd)
 geometry.initializeFlatSourceRegions()
 
 ###############################################################################
