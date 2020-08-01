@@ -108,22 +108,22 @@ Solver::~Solver() {
   if (_start_flux != NULL)
     delete [] _start_flux;
 
-  if (_scalar_flux != NULL && !_user_fluxes && !_gpu_solver)
+  if (_scalar_flux != NULL && !_user_fluxes)
     delete [] _scalar_flux;
 
-  if (_old_scalar_flux != NULL && !_gpu_solver)
+  if (_old_scalar_flux != NULL)
     delete [] _old_scalar_flux;
 
   if (_reference_flux != NULL)
     delete [] _reference_flux;
 
-  if (_stabilizing_flux != NULL && !_gpu_solver)
+  if (_stabilizing_flux != NULL)
     delete [] _stabilizing_flux;
 
-  if (_fixed_sources != NULL && !_gpu_solver)
+  if (_fixed_sources != NULL)
     delete [] _fixed_sources;
 
-  if (_reduced_sources != NULL && !_gpu_solver)
+  if (_reduced_sources != NULL)
     delete [] _reduced_sources;
 
   if (_boundary_leakage != NULL)
