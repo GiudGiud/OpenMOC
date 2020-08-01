@@ -108,22 +108,22 @@ Solver::~Solver() {
   if (_start_flux != NULL)
     delete [] _start_flux;
 
-  if (_scalar_flux != NULL && !_user_fluxes)
+  if (_scalar_flux != NULL && !_user_fluxes && !_gpu_solver)
     delete [] _scalar_flux;
 
-  if (_old_scalar_flux != NULL)
+  if (_old_scalar_flux != NULL && !_gpu_solver)
     delete [] _old_scalar_flux;
 
   if (_reference_flux != NULL)
     delete [] _reference_flux;
 
-  if (_stabilizing_flux != NULL)
+  if (_stabilizing_flux != NULL && !_gpu_solver)
     delete [] _stabilizing_flux;
 
-  if (_fixed_sources != NULL)
+  if (_fixed_sources != NULL && !_gpu_solver)
     delete [] _fixed_sources;
 
-  if (_reduced_sources != NULL)
+  if (_reduced_sources != NULL && !_gpu_solver)
     delete [] _reduced_sources;
 
   if (_boundary_leakage != NULL)
@@ -1866,6 +1866,19 @@ void Solver::printTimerReport() {
   /* CMFD acceleration time */
   if (_cmfd != NULL)
     _cmfd->printTimerReport();
+
+  if (_cmfd != NULL && _gpu_solver) {
+    double gpu_comm_time = _timer->getSplit("CMFD GPU to CPU transfer");
+    msg_string = "  CMFD GPU to CPU transfer";
+    msg_string.resize(53, '.');
+    log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), gpu_comm_time);
+
+    double cpu_comm_time = _timer->getSplit("CMFD CPU to GPU transfer");
+    msg_string = "  CMFD CPU to GPU transfer";
+    msg_string.resize(53, '.');
+    log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), cpu_comm_time);
+  }
+
 
   /* Time per segment */
   long num_segments = 0;
