@@ -89,8 +89,11 @@ private:
   /** The number of threads per thread block */
   int _T;
 
-  /** The FSR Material pointers index by FSR ID */
-  int* _FSR_materials;
+  /** The FSR Material pointers indexed by FSR ID */
+  int* _dev_FSR_materials;
+
+  /** The FSR volumes indexed by FSR ID */
+  FP_PRECISION* _dev_FSR_volumes;
 
   /** A pointer to an array of the Materials on the device */
   dev_material* _materials;
@@ -108,7 +111,7 @@ private:
   thrust::device_vector<FP_PRECISION> _start_flux;
 
   /** Thrust vector of FSR scalar fluxes */
-  thrust::device_vector<FP_PRECISION> _scalar_flux;
+  thrust::device_vector<FP_PRECISION> _dev_scalar_flux;
 
   /** Thrust vector of old FSR scalar fluxes */
   thrust::device_vector<FP_PRECISION> _old_scalar_flux;
@@ -158,22 +161,24 @@ public:
   void initializeFixedSources() override;
   void initializeCmfd() override;
 
-  void zeroTrackFluxes();
-  void flattenFSRFluxes(FP_PRECISION value);
-  void flattenFSRFluxesChiSpectrum();
-  void storeFSRFluxes();
-  void computeStabilizingFlux();
-  void stabilizeFlux();
-  void computeFSRSources(int iteration);
-  void computeFSRFissionSources();
-  void computeFSRScatterSources();
-  void transportSweep();
-  void addSourceToScalarFlux();
-  void computeKeff();
-  double normalizeFluxes();
-  double computeResidual(residualType res_type);
+  void zeroTrackFluxes() override;
+  void flattenFSRFluxes(FP_PRECISION value) override;
+  void flattenFSRFluxesChiSpectrum() override;
+  void storeFSRFluxes() override;
+  void computeStabilizingFlux() override;
+  void stabilizeFlux() override;
+  void computeFSRSources(int iteration) override;
+  void computeFSRFissionSources() override;
+  void computeFSRScatterSources() override;
+  void transportSweep() override;
+  void addSourceToScalarFlux() override;
+  void computeKeff() override;
+  double normalizeFluxes() override;
+  double computeResidual(residualType res_type) override;
 
-  void computeFSRFissionRates(double* fission_rates, long num_FSRs, bool nu = false);
+  void computeFSRFissionRates(double* fission_rates, long num_FSRs,
+                              bool nu = false) override;
+  void resetFixedSources();
 };
 
 
