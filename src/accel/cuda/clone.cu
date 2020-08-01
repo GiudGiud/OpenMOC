@@ -111,7 +111,9 @@ void clone_track(Track* track_h, dev_track* track_d,
     host_segments[s]._length = curr->_length;
     host_segments[s]._region_uid = curr->_region_id;
     host_segments[s]._material_index =
-      material_IDs_to_indices[curr->_material->getId()];
+         material_IDs_to_indices[curr->_material->getId()];
+    host_segments[s]._cmfd_surface_fwd = curr->_cmfd_surface_fwd;
+    host_segments[s]._cmfd_surface_bwd = curr->_cmfd_surface_bwd;
   }
 
   cudaMemcpy(dev_segments, host_segments,
