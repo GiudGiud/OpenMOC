@@ -385,6 +385,9 @@ class configuration:
                 # As of September 2019, nvcc does not support this flag:
                 if k != 'nvcc':
                     self.compiler_flags[k].append('-fno-omit-frame-pointer')
+                # Add nvcc debug flag
+                else:
+                    self.compiler_flags[k].append('-G')
 
                 ind = [i for i, item in enumerate(self.compiler_flags[k]) \
                        if item.startswith('-O')]
