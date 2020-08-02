@@ -1509,6 +1509,7 @@ void GPUSolver::initializeTracks() {
 
     /* Iterate through all Tracks and clone them as dev_tracks on the device */
     int index;
+    _timer->startTimer();
 
     for (int i=0; i < _tot_num_tracks; i++) {
 
@@ -1523,6 +1524,10 @@ void GPUSolver::initializeTracks() {
       cudaMemcpy(&_dev_tracks[i]._next_track_bwd,
                  &index, sizeof(int), cudaMemcpyHostToDevice);
     }
+
+    /* Record time to transfer tracks from CPU to GPU */
+    _timer->stopTimer();
+    _timer->recordSplit("GPU tracks transfer");
 
     /* Copy the total number of Tracks into constant memory on GPU */
     cudaMemcpyToSymbol(tot_num_tracks, &_tot_num_tracks,

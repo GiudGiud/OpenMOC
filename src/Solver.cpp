@@ -1868,13 +1868,18 @@ void Solver::printTimerReport() {
     _cmfd->printTimerReport();
 
   if (_cmfd != NULL && _gpu_solver) {
+    double gpu_tracks_time = _timer->getSplit("GPU tracks transfer");
+    msg_string = "  Tracks CPU to GPU transfer";
+    msg_string.resize(53, '.');
+    log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), gpu_tracks_time);
+
     double gpu_comm_time = _timer->getSplit("CMFD GPU to CPU transfer");
-    msg_string = "  CMFD GPU to CPU transfer";
+    msg_string = "  CMFD GPU to CPU flux transfer";
     msg_string.resize(53, '.');
     log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), gpu_comm_time);
 
     double cpu_comm_time = _timer->getSplit("CMFD CPU to GPU transfer");
-    msg_string = "  CMFD CPU to GPU transfer";
+    msg_string = "  CMFD CPU to GPU flux transfer";
     msg_string.resize(53, '.');
     log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), cpu_comm_time);
   }
