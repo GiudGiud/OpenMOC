@@ -763,9 +763,11 @@ __global__ void transportSweepOnDevice(FP_PRECISION* scalar_flux,
                      energy_group, track_flux, true);
     }
 
+#ifndef ONLYVACUUMBC
     /* Transfer boundary angular flux to outgoing Track */
     transferBoundaryFlux(curr_track, azim_index, track_flux, start_flux,
                          energy_angle_index, true);
+#endif
 
     /* Loop over each Track segment in reverse direction */
     track_flux = &temp_flux[track_flux_index + (num_polar_2)];
@@ -781,9 +783,11 @@ __global__ void transportSweepOnDevice(FP_PRECISION* scalar_flux,
                      energy_group, track_flux, false);
     }
 
+#ifndef ONLYVACUUMBC
     /* Transfer boundary angular flux to outgoing Track */
     transferBoundaryFlux(curr_track, azim_index, track_flux, start_flux,
                          energy_angle_index, false);
+#endif
 
     /* Update the indices for this thread to the next Track, energy group */
     tid += blockDim.x * gridDim.x;
@@ -1545,7 +1549,9 @@ void GPUSolver::initializeFluxArrays() {
   try {
     long size = 2 * _tot_num_tracks * _fluxes_per_track;
     _boundary_flux.resize(size);
+#ifndef ONLYVACUUMBC
     _start_flux.resize(size);
+#endif
 
     size = _num_FSRs * _NUM_GROUPS;
     _dev_scalar_flux.resize(size);
@@ -1631,7 +1637,9 @@ void GPUSolver::initializeFixedSources() {
  */
 void GPUSolver::zeroTrackFluxes() {
   thrust::fill(_boundary_flux.begin(), _boundary_flux.end(), 0.0);
+#ifndef ONLYVACUUMBC
   thrust::fill(_start_flux.begin(), _start_flux.end(), 0.0);
+#endif
 }
 
 
@@ -1740,9 +1748,11 @@ double GPUSolver::normalizeFluxes() {
   thrust::transform(_boundary_flux.begin(), _boundary_flux.end(),
                     thrust::constant_iterator<FP_PRECISION>(norm_factor),
                     _boundary_flux.begin(), thrust::multiplies<FP_PRECISION>());
+#ifndef ONLYVACUUMBC
   thrust::transform(_start_flux.begin(), _start_flux.end(),
                     thrust::constant_iterator<FP_PRECISION>(norm_factor),
                     _start_flux.begin(), thrust::multiplies<FP_PRECISION>());
+#endif
   return norm_factor;
 }
 
@@ -1835,8 +1845,10 @@ void GPUSolver::transportSweep() {
        thrust::raw_pointer_cast(&_dev_scalar_flux[0]);
   FP_PRECISION* boundary_flux =
        thrust::raw_pointer_cast(&_boundary_flux[0]);
+#ifndef ONLYVACUUMBC
   FP_PRECISION* start_flux =
        thrust::raw_pointer_cast(&_start_flux[0]);
+#endif
   FP_PRECISION* reduced_sources =
        thrust::raw_pointer_cast(&_reduced_sources[0]);
   CMFD_PRECISION* surface_currents =
@@ -1847,11 +1859,15 @@ void GPUSolver::transportSweep() {
   /* Initialize flux in each FSR to zero */
   flattenFSRFluxes(0.0);
 
+#ifndef ONLYVACUUMBC
   /* Copy starting flux to current flux */
   cudaMemcpy(boundary_flux, start_flux, 2 * _tot_num_tracks *
              _fluxes_per_track * sizeof(FP_PRECISION),
              cudaMemcpyDeviceToDevice);
   getLastCudaError();
+#else
+  thrust::fill(boundary_flux.begin(), boundary_flux.end(), 0.);
+#endif
 
   /* Reset surface currents */
   thrust::fill(_surface_currents.begin(), _surface_currents.end(), 0.0);
