@@ -34,6 +34,7 @@
 #include "clone.h"
 #include "dev_exponential.h"
 #include "GPUQuery.h"
+#include "GPUCmfd.h"
 
 /** If number of groups is known at compile time */
 #ifdef NGROUPS
@@ -68,9 +69,6 @@
  *  energy group for a given Track. These are copied to the boundary fluxes
  *  array at the beginning of each transport sweep */
 #define start_flux(t,pe2) (start_flux[2*(t)*polar_times_groups+(pe2)])
-
-/** Indexing macro for the CMFD cell currents */
-#define surface_currents(c_id,s_id,e) (surface_currents[c_id*num_cmfd_groups*NUM_FACES+s_id*num_cmfd_groups+e])
 
 /**
  * @class GPUSolver GPUSolver.h "openmoc/src/dev/gpu/GPUSolver.h"

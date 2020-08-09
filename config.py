@@ -153,7 +153,8 @@ class configuration:
     sources['nvcc'] = ['openmoc/cuda/openmoc_cuda_wrap.cpp',
                        'src/accel/cuda/GPUQuery.cu',
                        'src/accel/cuda/clone.cu',
-                       'src/accel/cuda/GPUSolver.cu']
+                       'src/accel/cuda/GPUSolver.cu',
+                       'src/accel/cuda/GPUCmfd.cu']
 
 
     ###########################################################################
@@ -228,7 +229,7 @@ class configuration:
     shared_libraries['icpc'] = ['stdc++', 'iomp5', 'pthread', 'irc',
                                 'imf','rt', 'mkl_rt','m',]
     shared_libraries['bgxlc'] = ['stdc++', 'pthread', 'm', 'xlsmp', 'rt']
-    shared_libraries['nvcc'] = ['cudadevrt', 'cudart']
+    shared_libraries['nvcc'] = ['cudadevrt', 'cudart', 'cusparse']
 
 
     ###########################################################################

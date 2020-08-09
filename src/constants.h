@@ -157,6 +157,10 @@
 
 #ifdef NVCC
 
+/** The number of GPU thread blocks and the number of threads per block */
+#define _NUM_GPU_THREAD_BLOCKS 64;
+#define _NUM_GPU_THREADS_IN_BLOCK 64;
+
 /** The maximum number of polar angles to reserve constant memory on GPU */
 #define MAX_POLAR_ANGLES_GPU 10
 

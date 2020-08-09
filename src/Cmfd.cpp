@@ -51,6 +51,7 @@ Cmfd::Cmfd() {
   _old_dif_surf_valid = false;
   _non_uniform = false;
   _widths_adjusted_for_domains = false;
+  _gpu_cmfd = false;
 
   /* Additional debug output */
   _check_neutron_balance = false;
@@ -1001,7 +1002,6 @@ void Cmfd::collapseXS() {
 }
 
 
-
 /**
  * @brief Computes the diffusion coefficient for a given CMFD cell and CMFD
  *        energy group.
@@ -1229,9 +1229,7 @@ double Cmfd::computeKeff(int moc_iteration) {
   _timer->startTimer();
 
   /* Solve the eigenvalue problem */
-  double k_eff = eigenvalueSolve(_A, _M, _new_flux, _k_eff,
-                                 _source_convergence_threshold, _SOR_factor,
-                                 _convergence_data, _domain_communicator);
+  double k_eff = solveEigenvalueProblem();
 
   /* Try to use a few-group solver to remedy convergence issues */
   bool reduced_group_solution = false;
@@ -1284,6 +1282,19 @@ double Cmfd::computeKeff(int moc_iteration) {
     printProlongationFactors();
 
   return _k_eff;
+}
+
+
+/**
+ * @brief Solve the eigenvalue problem AX = 1/k MX
+ *  @return The dominant eigenvalue of the nonlinear diffusion problem
+ */
+double Cmfd::solveEigenvalueProblem() {
+
+  double keff = eigenvalueSolve(_A, _M, _new_flux, _k_eff,
+                  _source_convergence_threshold, _SOR_factor,
+                  _convergence_data, _domain_communicator);
+  return keff;
 }
 
 
@@ -1723,6 +1734,10 @@ void Cmfd::setCMFDRelaxationFactor(double relaxation_factor) {
  */
 void Cmfd::checkBalance() {
   _check_neutron_balance = true;
+
+  if (_gpu_cmfd)
+    log_printf(ERROR, "Neutron balance checking is currently not implemented "
+               "for GPU CMFD");
 }
 
 
@@ -2812,6 +2827,15 @@ void Cmfd::rebalanceSigmaT(bool balance_sigma_t) {
  */
 bool Cmfd::isSigmaTRebalanceOn() {
   return _balance_sigma_t;
+}
+
+
+/**
+ * @brief Returns a flag indicating whether the CMFD will run on the GPU.
+ * @return A flag indicating whether the CMFD solver runs on the GPU.
+ */
+bool Cmfd::isGPUCmfd() {
+  return _gpu_cmfd;
 }
 
 
@@ -4146,8 +4170,6 @@ void Cmfd::copyCurrentsToBackup() {
  * @return The surface width
  */
 CMFD_PRECISION Cmfd::getSurfaceWidth(int surface, int global_ind) {
-
-  CMFD_PRECISION width;
 
   int ix = global_ind % _num_x;
   int iy = (global_ind % (_num_x * _num_y)) / _num_x;

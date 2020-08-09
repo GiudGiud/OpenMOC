@@ -9,7 +9,7 @@ __constant__ int NUM_GROUPS;
 #endif
 
 /** The number of polar angles */
-__constant__ int num_polar;
+extern __constant__ int num_polar;
 
 /** Half the number of polar angles */
 __constant__ int num_polar_2;
@@ -18,16 +18,16 @@ __constant__ int num_polar_2;
 __constant__ int polar_times_groups;
 
 /** The number of CMFD groups */
-__constant__ int num_cmfd_groups;
+extern __constant__ int num_cmfd_groups;
 
 /** Whether to tally CMFD currents */
 __constant__ bool _tally_cmfd_currents;
 
 /** The map from MOC to CMFD groups */
-__constant__ int cmfd_group_map[MAX_NUM_GROUPS_GPU];
+extern __constant__ int cmfd_group_map[MAX_NUM_GROUPS_GPU];
 
 /** An array for the sines of the polar angle in the Quadrature set */
-__constant__ FP_PRECISION sin_thetas[MAX_POLAR_ANGLES_GPU];
+extern __constant__ FP_PRECISION sin_thetas[MAX_POLAR_ANGLES_GPU];
 
 /** An array of the weights from the Quadrature set */
 __constant__ FP_PRECISION weights[MAX_POLAR_ANGLES_GPU*MAX_AZIM_ANGLES_GPU];
@@ -917,8 +917,8 @@ GPUSolver::GPUSolver(TrackGenerator* track_generator) :
   Solver(track_generator) {
 
   /* The default number of thread blocks and threads per thread block */
-  _B = 64;
-  _T = 64;
+  _B = _NUM_GPU_THREAD_BLOCKS;
+  _T = _NUM_GPU_THREADS_IN_BLOCK;
 
   _materials = NULL;
   _dev_tracks = NULL;
@@ -1894,13 +1894,17 @@ void GPUSolver::transportSweep() {
   log_printf(DEBUG, "Finished sweep on GPU.\n");
 
   if (_cmfd != NULL && _cmfd->isFluxUpdateOn()) {
-    /* Copy scalar fluxes and currents to host for CMFD */
-    _timer->startTimer();
-    cudaMemcpy(_cmfd->getLocalCurrents()->getArray(), surface_currents,
-               _num_cmfd_groups * _num_cmfd_cells * NUM_FACES *
-               sizeof(CMFD_PRECISION), cudaMemcpyDeviceToHost);
-    _timer->stopTimer();
-    _timer->recordSplit("CMFD GPU to CPU transfer");
+    if (!_cmfd->isGPUCmfd()) {
+      /* Copy scalar fluxes and currents to host for CMFD */
+      _timer->startTimer();
+      cudaMemcpy(_cmfd->getLocalCurrents()->getArray(), surface_currents,
+                 _num_cmfd_groups * _num_cmfd_cells * NUM_FACES *
+                 sizeof(CMFD_PRECISION), cudaMemcpyDeviceToHost);
+      _timer->stopTimer();
+      _timer->recordSplit("CMFD GPU to CPU transfer");
+    }
+    else
+      static_cast<GPUCmfd*>(_cmfd)->copySurfaceCurrents(_surface_currents);
   }
 }
 

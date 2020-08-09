@@ -50,7 +50,7 @@ inline bool stencilCompare(const std::pair<int, double>& firstElem,
  */
 class Cmfd {
 
-private:
+protected:
 
   /** Pointer to polar quadrature object */
   Quadrature* _quadrature;
@@ -244,6 +244,9 @@ private:
   /** Flag indicating whether to use centroid updating */
   bool _centroid_update_on;
 
+  /** Flag indicating whether the CMFD is using the GPU */
+  bool _gpu_cmfd;
+
   /** Flag indicating whether to check neutron balance on every CMFD solve */
   bool _check_neutron_balance;
 
@@ -354,10 +357,11 @@ private:
   /* Private worker functions */
   CMFD_PRECISION computeLarsensEDCFactor(CMFD_PRECISION dif_coef,
                                          CMFD_PRECISION delta);
-  void constructMatrices();
-  void collapseXS();
-  void updateMOCFlux();
-  void rescaleFlux();
+  virtual void collapseXS();
+  virtual void constructMatrices();
+  virtual double solveEigenvalueProblem();
+  virtual void updateMOCFlux();
+  virtual void rescaleFlux();
   void splitVertexCurrents();
   void splitEdgeCurrents();
   void getVertexSplitSurfaces(int cell, int vertex, std::vector<int>* surfaces);
@@ -447,6 +451,7 @@ public:
   bool isFluxUpdateOn();
   bool isCentroidUpdateOn();
   bool isSigmaTRebalanceOn();
+  bool isGPUCmfd();
 
   /* Set parameters */
   void setSORRelaxationFactor(double SOR_factor);
@@ -466,7 +471,7 @@ public:
   void setCentroidUpdateOn(bool centroid_update_on);
   void setGroupStructure(std::vector< std::vector<int> > group_indices);
   void setSourceConvergenceThreshold(double source_thresh);
-  void setQuadrature(Quadrature* quadrature);
+  virtual void setQuadrature(Quadrature* quadrature);
   void setNumUnboundedIterations(int unbounded_iterations);
   void setKNearest(int k_nearest);
   void setSolve3D(bool solve_3d);
