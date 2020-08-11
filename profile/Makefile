@@ -10,23 +10,12 @@ PROFILE        ?= no
 INFO           ?= no
 PRECISION      ?= single
 CMFD_PRECISION ?= single
+CUDA           ?= no
 
 #===============================================================================
 # Source Code List
 #===============================================================================
 
-#case = models/load-geometry/load-full-core.cpp
-#case = models/load-geometry/load-single-assembly.cpp
-#case = models/load-geometry/load-tc-study.cpp
-#case = models/load-geometry/load-few-assm.cpp
-#case = models/load-geometry/load-2D-full-core.cpp
-#case = models/load-geometry/trunc-core-2D.cpp
-#case = models/load-geometry/load-corner.cpp
-#case = models/load-geometry/load-assembly-lattice.cpp
-
-#case = models/load-geometry/load-geometry.cpp
-#case = models/simple-lattice/simple-lattice-3d.cpp
-#case = models/homogeneous/homogeneous.cpp
 case ?= models/run_time_standard/run_time_standard.cpp
 #case ?= models/assembly_1/load-assembly.cpp
 #case ?= models/core/load-core.cpp
@@ -62,6 +51,12 @@ TraverseSegments.cpp \
 Universe.cpp \
 Vector.cpp
 
+cuda_source = \
+clone.cu \
+GPUQuery.cu \
+GPUCmfd.cu \
+GPUSolver.cu
+
 cases = \
 Takeda/Takeda-unrodded.cpp \
 pin-cell/pin-cell-3d.cpp \
@@ -87,21 +82,20 @@ load-geometry/load-full-core.cpp
 #===============================================================================
 
 CFLAGS = -std=gnu++0x
+CUDAFLAGS = -DNVCC -std=c++11
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)
   CC = gcc
   CFLAGS += -DGNU
-  LDFLAGS += -lm
-  LDFLAGS += -lstdc++
+  LDFLAGS += -lm -lstdc++
 endif
 
 # MPI wrapped compiler
 ifeq ($(COMPILER),mpi)
   CC = mpic++
   CFLAGS += -DMPIx
-  LDFLAGS += -lm
-  LDFLAGS += -lstdc++
+  LDFLAGS += -lm -lstdc++
 endif
 
 # intel Compiler
@@ -116,8 +110,7 @@ endif
 # MPI wrapped intel Compiler
 ifeq ($(COMPILER),impi)
   CC = mpiicpc
-  CFLAGS += -DINTEL
-  CFLAGS += -DMPIx
+  CFLAGS += -DINTEL -DMPIx
 endif
 
 # Clang Compiler
@@ -134,11 +127,17 @@ ifeq ($(COMPILER),bluegene)
   CFLAGS += -DGNU
 endif
 
+# nVidia compiler
+ifeq ($(CUDA),yes)
+  NVCC = nvcc
+  CUDAFLAGS += --relocatable-device-code true
+  CUDALDFLAGS = -lcudadevrt -lcudart -lcusparse
+endif
+
 # Debug Flags
 ifeq ($(DEBUG),yes)
-  CFLAGS += -O0
-  CFLAGS += -g
-  CFLAGS += -fno-omit-frame-pointer
+  CFLAGS += -O0 -g -fno-omit-frame-pointer
+  CUDAFLAGS += -G
 else
   ifeq ($(COMPILER),gnu)
     CFLAGS += -Wno-unused-result
@@ -151,36 +150,40 @@ endif
 # Profiling Flags
 ifeq ($(PROFILE),yes)
   # pprof flags
-  CFLAGS += -pg
-  CFLAGS += -O0
-  CFLAGS += -fno-omit-frame-pointer
+  CFLAGS += -pg -O0 -fno-omit-frame-pointer
   # gprof and vtune flags
   #CFLAGS += -g
 endif
 
-# Precision Flags
+# Numerical precision Flags
 ifeq ($(PRECISION),single)
-  CFLAGS += -DFP_PRECISION=float
-  CFLAGS += -DSINGLE
+  CFLAGS += -DFP_PRECISION=float -DSINGLE
+  CUDAFLAGS += -DFP_PRECISION=float -DSINGLE
 endif
 ifeq ($(PRECISION),double)
   CFLAGS += -DFP_PRECISION=double
+  CUDAFLAGS += -DFP_PRECISION=double
 endif
 
 ifeq ($(CMFD_PRECISION),single)
   CFLAGS += -DCMFD_PRECISION=float -DLINALG_TOL=1E-7
+  CUDAFLAGS += -DCMFD_PRECISION=float -DLINALG_TOL=1E-7
 endif
 ifeq ($(CMFD_PRECISION),double)
   CFLAGS += -DCMFD_PRECISION=double -DLINALG_TOL=1E-15
+  CUDAFLAGS += -DCMFD_PRECISION=double -DLINALG_TOL=1E-15
 endif
 
-# Vector Flags, take into account strip mining with VEC_LENGTH sized vectors
+# Vector Flags, for strip mining with VEC_LENGTH sized vectors
 CFLAGS += -DVEC_ALIGNMENT=64
+CUDAFLAGS += -DVEC_ALIGNMENT=64
 ifeq ($(PRECISION),single)
   CFLAGS += -DVEC_LENGTH=8
+  CUDAFLAGS += -DVEC_LENGTH=8
 endif
 ifeq ($(PRECISION),double)
   CFLAGS += -DVEC_LENGTH=4
+  CUDAFLAGS += -DVEC_LENGTH=4
 endif
 
 # Optimization Flags
@@ -202,6 +205,9 @@ ifeq ($(OPTIMIZE),yes)
   endif
   ifeq ($(COMPILER),clang)
     CFLAGS += -O3 -ffast-math -fvectorize -fpic
+  endif
+  ifeq ($(CUDA),yes)
+    CUDAFLAGS += --use_fast_math
   endif
   # Set the number of groups at compile time
   #CFLAGS += -DNGROUPS=70
@@ -234,49 +240,71 @@ endif
 
 # OpenMP flags
 ifeq ($(OPENMP),yes)
-  CFLAGS += -fopenmp
-  CFLAGS += -DOPENMP
+  CFLAGS += -fopenmp -DOPENMP
+	LDFLAGS += -lgomp
 endif
 
 CFLAGS += -I../src/
+CUDAFLAGS += -I../src/accel/cuda/
+
 #===============================================================================
 # Program Name and Object Files
 #===============================================================================
 
 obj := $(source:.cpp=.o)
-
 source := $(addprefix ../src/, $(source))
-headers = $(source:.cpp=.h)
+
+cuda_obj := $(cuda_source:.cu=.o)
+cuda_source := $(addprefix ../src/accel/cuda/, $(cuda_source))
 
 obj := $(addprefix obj/, $(obj))
+cuda_obj := $(addprefix obj/cuda/, $(cuda_obj))
+
 cases := $(addprefix models/, $(cases))
 cases += $(case)
 
 programs = $(cases:.cpp=)
 program = $(case:.cpp=)
-
+$(info program is $(program))
 #===============================================================================
 # Targets to Build
 #===============================================================================
 
 default: folder $(addsuffix .o, $(program)) $(program)
 
-$(programs): $(obj)  $(headers) $(addsuffix .o, $(program))
-	$(CC) $(CFLAGS) $(obj) $(addsuffix .o, $@) -o $@ $(LDFLAGS)
+# List of files to compile, then linker command
+ifeq ($(CUDA),yes)
+  $(programs):  $(obj) $(cuda_obj) $(addsuffix .o, $(program))
+	  $(NVCC) $(obj) $(cuda_obj) $(addsuffix .o, $@) -o $@ $(LDFLAGS) $(CUDALDFLAGS)
+else
+  $(programs): $(obj) $(addsuffix .o, $(program))
+	  $(CC) $(obj) $(addsuffix .o, $@) -o $@ $(LDFLAGS)
+endif
 
+# Recipe for object files from cpp source
 obj/%.o: ../src/%.cpp Makefile
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.o: %.cpp Makefile
-	$(CC) $(CFLAGS) -c $< -o $@
+# Recipe for object files from cuda source
+obj/cuda/%.o: ../src/accel/cuda/%.cu Makefile
+	$(NVCC) $(CUDAFLAGS) -c $< -o $@
+
+# Recipe for object files from input
+ifeq ($(CUDA),yes)
+  %.o: %.cpp Makefile
+	  $(NVCC) $(CUDAFLAGS) -c $< -o $@
+else
+  %.o: %.cpp Makefile
+	  $(CC) $(CFLAGS) -c $< -o $@
+endif
 
 folder:
-	mkdir -p obj
+	mkdir -p obj obj/cuda
 
 all: folder $(addsuffix .o, $(programs)) $(programs)
 
 clean:
-	rm -rf $(program) $(obj) $(addsuffix .o, $(programs))
+	rm -rf $(program) $(obj) $(cuda_obj) $(addsuffix .o, $(programs))
 
 edit:
 	vim -p $(case) $(cases)
