@@ -12,8 +12,8 @@
   #include <cstddef>
   #include "../../src/constants.h"
   #include "../../src/Cmfd.h"
-  #include "../../src/accel/cuda/GPUCmfd.h"
   #include "../../src/Solver.h"
+  #include "../../src/accel/cuda/GPUCmfd.h"
   #include "../../src/accel/cuda/GPUSolver.h"
   #include "../../src/accel/cuda/GPUQuery.h"
   #include "../../src/accel/cuda/clone.h"
@@ -49,12 +49,14 @@
 %include "../swig/numpy_typemaps.i"
 #endif
 
+%ignore copySurfaceCurrents(thrust::device_vector<CMFD_PRECISION> surface_currents);
+
 %include <exception.i>
 %include <std_map.i>
 %include ../../src/constants.h
 %include ../../src/Cmfd.h
-%include ../../src/accel/cuda/GPUCmfd.h
 %include ../../src/Solver.h
+%include ../../src/accel/cuda/GPUCmfd.h
 %include ../../src/accel/cuda/GPUSolver.h
 %include ../../src/accel/cuda/GPUQuery.h
 %include ../../src/accel/cuda/clone.h

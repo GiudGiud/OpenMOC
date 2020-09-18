@@ -32,6 +32,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/iterator/transform_iterator.h>
 #include <thrust/iterator/permutation_iterator.h>
+#include "GPUHelper_functions.h"
 #include "clone.h"
 #include "dev_exponential.h"
 #include "GPUQuery.h"
@@ -66,14 +67,15 @@ private:
   int _T;
 
   dev_material* _materials;
-  dev_material* _FSR_materials;
+  int* _FSR_materials;
+  dev_material* _dev_fsr_materials;
   thrust::device_vector<CMFD_PRECISION> _new_flux;
   thrust::device_vector<CMFD_PRECISION> _old_flux;
-  thrust::device_vector<FP_PRECISION> _FSR_flux;
+  thrust::device_vector<FP_PRECISION> _FSR_fluxes;
   thrust::device_vector<CMFD_PRECISION> _new_source;
   thrust::device_vector<CMFD_PRECISION> _old_source;
-  FP_PRECISION* _volumes;
-  FP_PRECISION* _FSR_volumes;
+  thrust::device_vector<FP_PRECISION> _volumes;
+  thrust::device_vector<FP_PRECISION> _FSR_volumes;
   thrust::device_vector<CMFD_PRECISION> _volume_tally;
   thrust::device_vector<CMFD_PRECISION> _reaction_tally;
   thrust::device_vector<CMFD_PRECISION> _diffusion_tally;
@@ -89,9 +91,17 @@ private:
   thrust::device_vector<double> _dev_cell_widths_y;
   thrust::device_vector<double> _dev_cell_widths_z;
 
-  cusparseSpMatDescr_t _A;
+  /* A matrix storage */
+  int _A_num_nnz;
+  thrust::device_vector<int> dev_dA_csrOffsets;
+  int   *dA_columns;
+  float *dA_values;
+
+  /* M matrix storage */
   cusparseSpMatDescr_t _M;
 
+  void initializeMaterials();
+  void setFSRVolumes(FP_PRECISION* FSR_volumes);
 
   void collapseXS() override;
   void constructMatrices() override;
@@ -100,13 +110,16 @@ private:
   void updateMOCFlux() override;
   void setQuadrature(Quadrature* _quadrature) override;
 
+  double computeResidual();
+
 public:
 
   GPUCmfd();
   ~GPUCmfd();
 
   void copySurfaceCurrents(thrust::device_vector<CMFD_PRECISION> surface_currents);
-
+  void setFSRFluxes(FP_PRECISION* scalar_flux, bool from_device);
+  void setFSRMaterials(int* FSR_materials, dev_material* dev_materials);
 };
 
 #endif /* GPUCMFD_H_ */

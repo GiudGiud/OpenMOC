@@ -366,7 +366,7 @@ protected:
   void splitEdgeCurrents();
   void getVertexSplitSurfaces(int cell, int vertex, std::vector<int>* surfaces);
   void getEdgeSplitSurfaces(int cell, int edge, std::vector<int>* surfaces);
-  void initializeMaterials();
+  virtual void initializeMaterials();
   void initializeCurrents();
   void generateKNearestStencils();
   int convertDirectionToSurface(int* direction);
@@ -496,7 +496,7 @@ public:
 
   /* Set FSR parameters */
   void setFSRMaterials(Material** FSR_materials);
-  void setFSRVolumes(FP_PRECISION* FSR_volumes);
+  virtual void setFSRVolumes(FP_PRECISION* FSR_volumes);
   void setFSRFluxes(FP_PRECISION* scalar_flux);
   void setFSRSources(FP_PRECISION* sources);
   void setCellFSRs(std::vector< std::vector<long> >* cell_fsrs);

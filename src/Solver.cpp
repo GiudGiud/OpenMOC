@@ -808,6 +808,7 @@ void Solver::initializeMaterials(solverMode mode) {
 
   /* GPU solver needs this */
   _num_materials = _geometry->getNumMaterials();
+  _num_groups = _geometry->getNumEnergyGroups();
 }
 
 

@@ -46,149 +46,6 @@ __global__ void printmateriald(dev_material* matd)
     printf("    sigmaf(%i) = %f\n", g, matd->_sigma_f[g]);
 }
 
-/**
- * @brief A struct used to check if a value on the GPU is equal to INF.
- * @details This is used as a predicate in Thrust routines.
- */
-struct isinf_test {
-  /**
-   * @brief Checks if a double precision value is INF.
-   * @param a the value to check
-   * @return true if equal to INF, false otherwise
-   */
-  __host__ __device__ bool operator()(double a) {
-    return isinf(a);
-  }
-
-  /**
-   * @brief Checks if a single precision value is INF.
-   * @param a the value to check
-   * @return true if equal to INF, false otherwise
-   */
-  __host__ __device__ bool operator()(float a) {
-    return isinf(a);
-  }
-};
-
-
-/**
- * @brief A struct used to check if a value on the GPU is equal to NaN.
- * @details This is used as a predicate in Thrust routines.
- */
-struct isnan_test {
-  /**
-   * @brief Checks if a double precision value is NaN.
-   * @param a the value to check
-   * @return true if equal to NaN, false otherwise
-   */
-  __host__ __device__ bool operator()(double a) {
-    return isnan(a);
-  }
-
-  /**
-   * @brief Checks if a single precision value is NaN.
-   * @param a the value to check
-   * @return true if equal to NaN, false otherwise
-   */
-  __host__ __device__ bool operator()(float a) {
-    return isnan(a);
-  }
-};
-
-/**
- * @brief A functor to multiply all elements in a Thrust vector by a constant.
- * @param constant the constant to multiply the vector
- */
-template <typename T>
-struct multiplyByConstant {
-
-public:
-  /* The constant to multiply by */
-  const T constant;
-
-  /**
-   * @brief Constructor for the functor.
-   * @param constant to multiply each element in a Thrust vector
-   */
-  multiplyByConstant(T constant) : constant(constant) {}
-
-  /**
-   * @brief Multiply an element in a Thrust vector.
-   * @param VecElem the element to multiply
-   */
-  __host__ __device__ void operator()(T& VecElem) const {
-    VecElem = VecElem * constant;
-  }
-};
-
-
-/**
- * @class This provides a templated interface for a strided iterator over
- *        a Thrust device_vector on a GPU.
- * @details This code is taken from the Thrust examples site on 1/20/2015:
- *           https://github.com/thrust/thrust/blob/master/examples/strided_range.cu
- */
-template <typename Iterator>
-class strided_range {
-
-public:
-
-  typedef typename thrust::iterator_difference<Iterator>::type difference_type;
-
-  struct stride_functor : public thrust::unary_function<difference_type,difference_type> {
-
-    difference_type stride;
-
-    stride_functor(difference_type stride) : stride(stride) { }
-
-    __host__ __device__ difference_type operator()(const difference_type& i) const {
-      return stride * i;
-    }
-  };
-
-  typedef typename thrust::counting_iterator<difference_type> CountingIterator;
-  typedef typename thrust::transform_iterator<stride_functor, CountingIterator>
-    TransformIterator;
-  typedef typename thrust::permutation_iterator<Iterator,TransformIterator>
-    PermutationIterator;
-  typedef PermutationIterator iterator;
-
-  /**
-   * @brief The strided iterator constructor.
-   */
-  strided_range(Iterator first, Iterator last, difference_type stride)
-    : first(first), last(last), stride(stride) { }
-
-  /**
-   * @brief Get the first element in the iterator.
-   * @return the first element in the iterator
-   */
-  iterator begin(void) const {
-    return PermutationIterator(first,
-      TransformIterator(CountingIterator(0), stride_functor(stride)));
-  }
-
-  /**
-   * @brief Get the last element in the iterator.
-   * @return the last element in the iterator
-   */
-  iterator end(void) const {
-    return begin() + ((last - first) + (stride - 1)) / stride;
-  }
-
-protected:
-
-  /** The first element in the underlying device_vector as set by the constructor */
-  Iterator first;
-
-  /** The last element in the underlying device_vector as set by the constructor */
-  Iterator last;
-
-  /** The stride to use when iterating over the underlying device_vector */
-  difference_type stride;
-
-};
-
 
 /**
  * @brief Compute the stabilizing flux
@@ -908,7 +765,7 @@ __global__ void computeFSRFissionRatesOnDevice(FP_PRECISION* FSR_volumes,
 
 /**
  * @brief Constructor initializes arrays for dev_tracks and dev_materials..
- * @details The constructor initalizes the number of CUDA threads and thread
+ * @details The constructor initializes the number of CUDA threads and thread
  *          blocks each to a default of 64.
  * @param track_generator an optional pointer to the TrackjGenerator
  */
@@ -1338,6 +1195,17 @@ void GPUSolver::initializeCmfd() {
 
   /* Resize host surface currents array */
   _surface_currents.resize(_num_cmfd_cells * _num_cmfd_groups * NUM_FACES, 0);
+
+  /* Transfer thrust array of FSR fluxes to the CMFD */
+  //if (_cmfd->isGPUCmfd())
+  //  _cmfd.setFSRFluxes(&_dev_scalar_flux[0]);
+
+  /* Transfer FSR materials to the CMFD */
+  if (_cmfd->isGPUCmfd())
+    static_cast<GPUCmfd*>(_cmfd)->setFSRMaterials(_dev_FSR_materials, _materials);
+
+  /* Check for errors */
+  getLastCudaError();
 }
 
 
@@ -1873,11 +1741,20 @@ void GPUSolver::transportSweep() {
 #else
   thrust::fill(boundary_flux.begin(), boundary_flux.end(), 0.);
 #endif
+  log_printf(DEBUG, "Copied host to device flux.");
 
   /* Reset surface currents */
   thrust::fill(_surface_currents.begin(), _surface_currents.end(), 0.0);
 
-  log_printf(DEBUG, "Copied host to device flux.");
+  /* Analyze transport sweep kernel */
+  if (get_log_level() == INFO) {
+    int minGridSize, blockSize;
+    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize,
+                                       transportSweepOnDevice, 0,
+                                       _tot_num_tracks);
+    log_printf(INFO, "Kernel TransportSweep: suggested minGridSize %d blockSize"
+               " %d", minGridSize, blockSize);
+  }
 
   /* Perform transport sweep on all tracks */
   _timer->startTimer();
@@ -1903,8 +1780,9 @@ void GPUSolver::transportSweep() {
       _timer->stopTimer();
       _timer->recordSplit("CMFD GPU to CPU transfer");
     }
-    else
+    else {
       static_cast<GPUCmfd*>(_cmfd)->copySurfaceCurrents(_surface_currents);
+    }
   }
 }
 
@@ -1925,13 +1803,17 @@ void GPUSolver::addSourceToScalarFlux() {
   cudaDeviceSynchronize();
 
   if (_cmfd != NULL && _cmfd->isFluxUpdateOn()) {
-    /* Copy scalar fluxes and currents to host for CMFD */
-    _timer->startTimer();
-    cudaMemcpy(_scalar_flux, thrust::raw_pointer_cast(_dev_scalar_flux.data()),
-               _num_FSRs * _NUM_GROUPS * sizeof(FP_PRECISION),
-               cudaMemcpyDeviceToHost);
-    _timer->stopTimer();
-    _timer->recordSplit("CMFD GPU to CPU transfer");
+    if (!_cmfd->isGPUCmfd()) {
+      /* Copy scalar fluxes and currents to host for CMFD */
+      _timer->startTimer();
+      cudaMemcpy(_scalar_flux, thrust::raw_pointer_cast(_dev_scalar_flux.data()),
+                 _num_FSRs * _NUM_GROUPS * sizeof(FP_PRECISION),
+                 cudaMemcpyDeviceToHost);
+      _timer->stopTimer();
+      _timer->recordSplit("CMFD GPU to CPU transfer");
+    }
+    else
+      static_cast<GPUCmfd*>(_cmfd)->setFSRFluxes(scalar_flux, true);
   }
 }
 

@@ -31,6 +31,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/iterator/transform_iterator.h>
 #include <thrust/iterator/permutation_iterator.h>
+#include "GPUHelper_functions.h"
 #include "clone.h"
 #include "dev_exponential.h"
 #include "GPUQuery.h"

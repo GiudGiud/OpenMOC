@@ -55,10 +55,10 @@ __constant__ float relaxation_factor;
  * @return The surface width
  */
 __device__ FP_PRECISION getSurfaceWidth(int surface,
-                             int global_ind,
-                             double* cell_widths_x,
-                             double* cell_widths_y,
-                             double* cell_widths_z) {
+                                        int global_ind,
+                                        double* cell_widths_x,
+                                        double* cell_widths_y,
+                                        double* cell_widths_z) {
 
   int _num_x = local_num_x;
   int _num_y = local_num_y;
@@ -83,10 +83,14 @@ __device__ FP_PRECISION getSurfaceWidth(int surface,
  * @param neighbor give cell in neighboring domain
  * @return neighboring CMFD cell ID
  */
-__device__ int getCellNext(int cell, int surface_id, bool global, bool neighbor) {
+__device__ int getCellNext(int cell,
+                           int surface_id,
+                           bool global,
+                           bool neighbor) {
 
   int cell_next = -1;
 
+  /* Get x, y, z coordinates in lattice from the cell id */
   int x, y, z;
   int nx, ny, nz;
   x = (cell % (local_num_x * local_num_y)) % local_num_x;
@@ -151,13 +155,16 @@ __device__ int getCellNext(int cell, int surface_id, bool global, bool neighbor)
  * @brief Returns the width of the surface perpendicular to a given surface
  * @param surface A surface index, from 0 to NUM_FACES - 1
  * @param global_ind The CMFD cell global index
+ * @param cell_widths_x The CMFD mesh cell widths in the X direction
+ * @param cell_widths_y The CMFD mesh cell widths in the Y direction
+ * @param cell_widths_z The CMFD mesh cell widths in the Z direction
  * @return The perpendicular surface width
  */
 __device__ CMFD_PRECISION getPerpendicularSurfaceWidth(int surface,
-                                            int global_ind,
-                                            double* cell_widths_x,
-                                            double* cell_widths_y,
-                                            double* cell_widths_z) {
+                                                       int global_ind,
+                                                       double* cell_widths_x,
+                                                       double* cell_widths_y,
+                                                       double* cell_widths_z) {
 
   //TODO Domain decomposition
   int _num_x = local_num_x;
@@ -211,7 +218,7 @@ __device__ CMFD_PRECISION getPerpendicularSurfaceWidth(int surface,
  * @return The diffusion coefficient correction factor
  */
 __device__ CMFD_PRECISION computeLarsensEDCFactor(CMFD_PRECISION dif_coef,
-                                       CMFD_PRECISION delta) {
+                                                  CMFD_PRECISION delta) {
 
   /* Initialize variables */
   CMFD_PRECISION alpha, mu, expon;
@@ -248,11 +255,13 @@ __device__ CMFD_PRECISION computeLarsensEDCFactor(CMFD_PRECISION dif_coef,
  *          all MOC groups in the given CMFD energy group.
  * @param cmfd_cell A CMFD cell
  * @param group A CMFD energy group
+ * @param diffusion_tally A pointer to the array of diffusion tallies
+ * @param diffusion_tally A pointer to the array of reaction (flux) tallies
  * @return The diffusion coefficient
  */
 __device__ CMFD_PRECISION getDiffusionCoefficient(int cmfd_cell, int group,
-                                       CMFD_PRECISION* diffusion_tally,
-                                       CMFD_PRECISION* reaction_tally) {
+                                              CMFD_PRECISION* diffusion_tally,
+                                              CMFD_PRECISION* reaction_tally) {
   return diffusion_tally(cmfd_cell,group) / reaction_tally(cmfd_cell,group);
 }
 
@@ -274,19 +283,19 @@ __device__ CMFD_PRECISION getDiffusionCoefficient(int cmfd_cell, int group,
  * @param dif_surf_corr the correction diffusion coefficient \f$ \tilde{D} \f$
  */
 __device__ void getSurfaceDiffusionCoefficient(int cmfd_cell, int surface,
-                                    int group,
-                                    CMFD_PRECISION* old_flux,
-                                    CMFD_PRECISION* surface_currents,
-                                    CMFD_PRECISION* diffusion_tally,
-                                    CMFD_PRECISION* reaction_tally,
-                                    CMFD_PRECISION& dif_surf,
-                                    CMFD_PRECISION& dif_surf_corr,
-                                    CMFD_PRECISION* old_dif_surf_corr,
-                                    double* cell_widths_x,
-                                    double* cell_widths_y,
-                                    double* cell_widths_z,
-                                    bool old_dif_surf_valid,
-                                    int moc_iteration) {
+                                              int group,
+                                              CMFD_PRECISION* old_flux,
+                                              CMFD_PRECISION* surface_currents,
+                                              CMFD_PRECISION* diffusion_tally,
+                                              CMFD_PRECISION* reaction_tally,
+                                              CMFD_PRECISION& dif_surf,
+                                              CMFD_PRECISION& dif_surf_corr,
+                                              CMFD_PRECISION* old_dif_surf_corr,
+                                              double* cell_widths_x,
+                                              double* cell_widths_y,
+                                              double* cell_widths_z,
+                                              bool old_dif_surf_valid,
+                                              int moc_iteration) {
 
   FP_PRECISION current, current_out, current_in;
   CMFD_PRECISION flux_next;
@@ -431,7 +440,8 @@ __device__ void getSurfaceDiffusionCoefficient(int cmfd_cell, int surface,
  * @param tid_max the upper bound on the CMFD cell number
  */
 __global__ void collapseXSOnDevice(dev_material* materials,
-                                   dev_material* FSR_materials,
+                                   int* FSR_materials,
+                                   dev_material* dev_fsr_materials,
                                    FP_PRECISION* old_flux,
                                    FP_PRECISION* FSR_fluxes,
                                    FP_PRECISION* volumes,
@@ -444,6 +454,8 @@ __global__ void collapseXSOnDevice(dev_material* materials,
                                    long tid_offset,
                                    long tid_max) {
 
+  //printf("1xsf %p %f %f\n", FSR_materials, (&FSR_materials[0])->_sigma_t[0], (&FSR_materials[0])->_sigma_t[1]);
+  printf("map %d %d %d", group_indices[0], group_indices[10], group_indices[15]);
   /* Get CMFD cell index */
   int tid = tid_offset + threadIdx.x + blockIdx.x * blockDim.x;
   //NOTE The chi tally is the only part that currently precludes including
@@ -458,11 +470,13 @@ __global__ void collapseXSOnDevice(dev_material* materials,
   FP_PRECISION* scat;
 
   /* Get buffers for prodction tallies */
-  CMFD_PRECISION* scat_tally = &buffer[0];
-  CMFD_PRECISION* chi_tally = &buffer[num_cmfd_groups];
+  CMFD_PRECISION* scat_tally = &buffer[threadIdx.x*2*num_cmfd_groups];
+  CMFD_PRECISION* chi_tally = &buffer[threadIdx.x*2*num_cmfd_groups +
+                                      num_cmfd_groups];
 
   /* Pointers to material objects */
   dev_material* fsr_material;
+  int fsr_material_index;
   dev_material* cell_material;
 
   while (tid < tid_max) {
@@ -471,7 +485,7 @@ __global__ void collapseXSOnDevice(dev_material* materials,
     cell_material = &materials[i];
 
     /* Zero group-wise fission buffer */
-    double neutron_production_tally = 0.0;
+    FP_PRECISION neutron_production_tally = 0.0;
     for (int e = 0; e < num_cmfd_groups; e++)
       chi_tally[e] = 0.0;
 
@@ -481,15 +495,20 @@ __global__ void collapseXSOnDevice(dev_material* materials,
 
       /* Get fsr id from 1D vector of all FSRs in cmfd cells */
       int fsr = cmfd_cells_fsrs[r];
+      printf("cell %d index %d fsr %d volume %f\n", i, r, fsr, FSR_volumes[fsr]);
 
-      fsr_material = &FSR_materials[fsr];
+      fsr_material_index = FSR_materials[fsr];
+      fsr_material = &dev_fsr_materials[fsr_material_index];
       volume = FSR_volumes[fsr];
+      printf("1xsf %p\n", fsr_material);
+      printf("flux %f\n", FSR_fluxes[fsr*num_moc_groups]);//, fsr_material->_nu_sigma_f[0]);
 
       /* Calculate total neutron production in the FSR */
-      double neutron_production = 0.0;
+      FP_PRECISION neutron_production = 0.0;
       for (int h = 0; h < num_moc_groups; h++)
         neutron_production += fsr_material->_nu_sigma_f[h] *
              FSR_fluxes[fsr*num_moc_groups+h] * volume;
+      printf("flux %f\n", FSR_fluxes[fsr*num_moc_groups]);//, fsr_material->_nu_sigma_f[0]);
 
       /* Calculate contribution to all CMFD groups */
       for (int e=0; e < num_cmfd_groups; e++) {
@@ -547,7 +566,8 @@ __global__ void collapseXSOnDevice(dev_material* materials,
           int fsr = cmfd_cells_fsrs[r];
 
           /* Gets FSR volume, material, and cross sections */
-          fsr_material = &FSR_materials[fsr];
+          fsr_material_index = FSR_materials[fsr];
+          fsr_material = &dev_fsr_materials[fsr_material_index];
           volume = FSR_volumes[fsr];
           scat = fsr_material->_sigma_s;
           flux = FSR_fluxes[fsr*num_moc_groups+h];
@@ -586,7 +606,7 @@ __global__ void collapseXSOnDevice(dev_material* materials,
      if (rxn_tally <= 0) {
        int cell = i; //FIXME Domain decomposition: getGlobalCMFDCell(i);
        printf("WARNING: Negative or zero reaction tally calculated in CMFD cell"
-              " %d in CMFD group %d : %e", cell, e + 1, rxn_tally);
+              " %d in CMFD group %d : %f", cell, e + 1, rxn_tally);
 
        /* Set all cross sections to be 1 */
        rxn_tally = ZERO_SIGMA_T;
@@ -625,6 +645,7 @@ __global__ void collapseXSOnDevice(dev_material* materials,
     /* Update tid for this thread */
     tid += blockIdx.x * blockDim.x;
   }
+  printf("Done");
 }
 
 
@@ -865,11 +886,6 @@ GPUCmfd::GPUCmfd()
   _B = _NUM_GPU_THREAD_BLOCKS;
   _T = _NUM_GPU_THREADS_IN_BLOCK;
 
-  _materials = NULL;
-  _FSR_materials = NULL;
-  _volumes = NULL;
-  _FSR_volumes = NULL;
-
   _gpu_cmfd = true;
 }
 
@@ -879,8 +895,66 @@ GPUCmfd::GPUCmfd()
  */
 GPUCmfd::~GPUCmfd() {
 
-  cusparseDestroySpMat(_A);
+  //cusparseDestroySpMat(_A);
   cusparseDestroySpMat(_M);
+}
+
+
+/**
+ * @brief Initialize the CMFD materials.
+ */
+void GPUCmfd::initializeMaterials() {
+
+  /* Compute and log size in memory of Material array */
+  double size = (double) (_num_cmfd_groups + 4) * _num_cmfd_groups *
+              _local_num_x * _local_num_y * _local_num_z *
+              sizeof(FP_PRECISION) / (double) 1e6;
+  log_printf(NORMAL, "GPU CMFD material storage per domain = %6.2f MB", size);
+
+  cudaMalloc(&_materials, getNumCells() * sizeof(dev_material));
+  getLastCudaError();
+}
+
+
+/**
+ * @brief Set the FSR materials array pointer.
+ * @param FSR_materials pointer to an array of material indices
+ * @param dev_material pointer to an array of on-device materials
+ */
+void GPUCmfd::setFSRMaterials(int* FSR_materials,
+                              dev_material* dev_materials) {
+  _FSR_materials = FSR_materials;
+  _dev_fsr_materials = dev_materials;
+}
+
+
+/**
+ * @brief Set the pointer to the array of FSR_volumes.
+ * @param FSR_volumes array of FSR volumes
+ */
+void GPUCmfd::setFSRVolumes(FP_PRECISION* FSR_volumes) {
+  _FSR_volumes.resize(_num_FSRs);
+  cudaMemcpy(thrust::raw_pointer_cast(_FSR_volumes.data()), FSR_volumes,
+             _num_FSRs * sizeof(FP_PRECISION), cudaMemcpyHostToDevice);
+  getLastCudaError();
+}
+
+
+/**
+ * @brief Set pointer to FSR flux array.
+ * @param scalar_flux pointer to FSR flux array
+ * @param from_device whether the scalar flux array is on the device
+ */
+void GPUCmfd::setFSRFluxes(FP_PRECISION* scalar_flux, bool from_device) {
+  _FSR_fluxes.resize(_num_FSRs * _num_moc_groups);
+  if (!from_device)
+    cudaMemcpy(thrust::raw_pointer_cast(_FSR_fluxes.data()), scalar_flux,
+               _num_FSRs * _num_moc_groups * sizeof(FP_PRECISION),
+               cudaMemcpyHostToDevice);
+  else
+    cudaMemcpy(thrust::raw_pointer_cast(_FSR_fluxes.data()), scalar_flux,
+               _num_FSRs * _num_moc_groups * sizeof(FP_PRECISION),
+               cudaMemcpyDeviceToDevice);
 }
 
 
@@ -927,28 +1001,45 @@ void GPUCmfd::collapseXS() {
   //TODO Move to its own initialization routine
   /* Source region to CMFD cells mapping vectors */
   int num_cmfd_cells = _local_num_x * _local_num_y * _local_num_z;
-  _cmfd_cells_fsrs_index.resize(num_cmfd_cells);
-  _cmfd_cells_fsrs.resize(_num_FSRs);
+  _cmfd_cells_fsrs_index.resize(num_cmfd_cells + 1, 0);
+  _cmfd_cells_fsrs.resize(_num_FSRs, 0);
 
-  /* Loop over CMFD cells */
-  int fsr = 0;
+  // /* Loop over CMFD cells */
   std::vector<long>::iterator iter;
+  thrust::host_vector<long> host_cmfd_cells_fsrs_index(num_cmfd_cells + 1, 0);
+  thrust::host_vector<long> host_cmfd_cells_fsrs(_num_FSRs, 0);
+  int fsr = 0;
+  long cum_num_fsrs = 0;
   for (int i = 0; i < _local_num_x * _local_num_y * _local_num_z; i++) {
 
     /* Number of FSRs in each CMFD cell */
-    _cmfd_cells_fsrs_index[i] = _cell_fsrs.at(i).size();
+    host_cmfd_cells_fsrs_index[i] = cum_num_fsrs;
+    cum_num_fsrs += _cell_fsrs.at(i).size();
 
     /* Form list of FSRs in each cell in a 1D vector */
     for (iter = _cell_fsrs.at(i).begin();
          iter != _cell_fsrs.at(i).end(); ++iter)
-      _cmfd_cells_fsrs[fsr++] = *iter;
+      host_cmfd_cells_fsrs[fsr++] = *iter;
   }
+  host_cmfd_cells_fsrs_index[num_cmfd_cells] = _num_FSRs;
+  thrust::copy(host_cmfd_cells_fsrs.begin(), host_cmfd_cells_fsrs.end(),
+       _cmfd_cells_fsrs.begin());
+  thrust::copy(host_cmfd_cells_fsrs_index.begin(),
+       host_cmfd_cells_fsrs_index.end(), _cmfd_cells_fsrs_index.begin());
+
+  _volumes.resize(num_cmfd_cells);
+  _old_flux.resize(num_cmfd_cells * _num_cmfd_groups);
+  _volume_tally.resize(num_cmfd_cells * _num_cmfd_groups);
+  _reaction_tally.resize(num_cmfd_cells * _num_cmfd_groups);
+  _diffusion_tally.resize(num_cmfd_cells * _num_cmfd_groups);
+
+  log_printf(NORMAL, "%d %d %d %d %d %d %d %d %d",
+                  _old_flux.size(), _volumes.size(), _FSR_fluxes.size(), _FSR_volumes.size(), _volume_tally.size(),
+                  _reaction_tally.size(), _diffusion_tally.size(), _cmfd_cells_fsrs_index.size(), _cmfd_cells_fsrs.size());
 
   /* Get device pointer to the Thrust vectors */
-  dev_material* materials = thrust::raw_pointer_cast(&_materials[0]);
   FP_PRECISION* old_flux = thrust::raw_pointer_cast(&_old_flux[0]);
   FP_PRECISION* volumes = thrust::raw_pointer_cast(&_volumes[0]);
-  dev_material* FSR_materials = thrust::raw_pointer_cast(&_FSR_materials[0]);
   FP_PRECISION* FSR_fluxes = thrust::raw_pointer_cast(&_FSR_fluxes[0]);
   FP_PRECISION* FSR_volumes = thrust::raw_pointer_cast(&_FSR_volumes[0]);
   FP_PRECISION* volume_tally = thrust::raw_pointer_cast(&_volume_tally[0]);
@@ -959,8 +1050,8 @@ void GPUCmfd::collapseXS() {
   long* cmfd_cells_fsrs = thrust::raw_pointer_cast(
        &_cmfd_cells_fsrs[0]);
 
-  int shared_mem = _T * 2 * _num_cmfd_groups * sizeof(CMFD_PRECISION);
-
+  int shared_mem = _T * 20 * _num_cmfd_groups * sizeof(CMFD_PRECISION);
+  //////////////////
   /* Print advice on number of blocks/threads */
   if (get_log_level() == INFO) {
     int minGridSize, blockSize;
@@ -972,13 +1063,15 @@ void GPUCmfd::collapseXS() {
 
   /* Loop on CMFD cells */
   //NOTE Diffusion coefficient makes looping on energy groups difficult
-  collapseXSOnDevice<<<_B, _T, shared_mem>>>(materials, FSR_materials,
+  collapseXSOnDevice<<<_B, _T, shared_mem>>>(_materials, _FSR_materials,
+                                             _dev_fsr_materials,
                                              old_flux, FSR_fluxes, volumes,
                                              FSR_volumes, volume_tally,
                                              reaction_tally, diffusion_tally,
                                              cmfd_cells_fsrs_index,
                                              cmfd_cells_fsrs, 0,
                                              num_cmfd_cells);
+  getLastCudaError();
 }
 
 
@@ -993,10 +1086,14 @@ void GPUCmfd::collapseXS() {
 void GPUCmfd::constructMatrices() {
 
   log_printf(INFO, "Constructing matrices on GPU...");
+  getLastCudaError();
 
+  /* Allocate arrays to compute the size of each row in A and M */
   size_t size = getNumCells() * _num_cmfd_groups;
-  thrust::device_vector<int> dev_A_sizes(size);
-  thrust::device_vector<int> dev_M_sizes(size);
+  thrust::device_vector<int> dev_A_sizes;
+  thrust::device_vector<int> dev_M_sizes;
+  dev_A_sizes.resize(size);
+  dev_M_sizes.resize(size);
   int* A_sizes = thrust::raw_pointer_cast(&dev_A_sizes[0]);
   int* M_sizes = thrust::raw_pointer_cast(&dev_M_sizes[0]);
   dev_material* materials = thrust::raw_pointer_cast(&_materials[0]);
@@ -1008,12 +1105,12 @@ void GPUCmfd::constructMatrices() {
   int M_num_nnz = thrust::reduce(dev_M_sizes.begin(), dev_M_sizes.end());
 
   /* Allocate the CMFD sparse matrix vectors */
-  thrust::device_vector<int> dev_dA_csrOffsets(size);
+  dev_dA_csrOffsets.resize(size);
   thrust::device_vector<int> dev_dM_csrOffsets(size);
   int* dA_csrOffsets = thrust::raw_pointer_cast(&dev_dA_csrOffsets[0]);
   int* dM_csrOffsets = thrust::raw_pointer_cast(&dev_dM_csrOffsets[0]);
-  int   *dA_columns, *dM_columns;
-  float *dA_values, *dM_values;
+  int *dM_columns;
+  float *dM_values;
   cudaMalloc((void**) &dA_columns, A_num_nnz * sizeof(int));
   cudaMalloc((void**) &dA_values,  A_num_nnz * sizeof(CMFD_PRECISION));
   cudaMalloc((void**) &dM_columns, M_num_nnz * sizeof(int));
@@ -1024,6 +1121,9 @@ void GPUCmfd::constructMatrices() {
                          dev_dA_csrOffsets.begin() + 1);
   thrust::inclusive_scan(dev_M_sizes.begin(), dev_M_sizes.end(),
                          dev_dM_csrOffsets.begin() + 1);
+
+  //cudaFree(dev_A_sizes);
+  //cudaFree(dev_M_sizes);
 
   /* Print advice on number of blocks/threads */
   if (get_log_level() == INFO) {
@@ -1059,7 +1159,7 @@ void GPUCmfd::constructMatrices() {
   cudaMemcpyToSymbol(relaxation_factor, &_relaxation_factor, sizeof(int), 0,
                      cudaMemcpyHostToDevice);
 
-  /* Transfer CMFD mesh size to device */
+  /* Transfer CMFD mesh size to constant memory on device */
   cudaMemcpyToSymbol(local_num_x, &_local_num_x, sizeof(int), 0, cudaMemcpyHostToDevice);
   cudaMemcpyToSymbol(local_num_y, &_local_num_y, sizeof(int), 0, cudaMemcpyHostToDevice);
   cudaMemcpyToSymbol(local_num_z, &_local_num_z, sizeof(int), 0, cudaMemcpyHostToDevice);
@@ -1079,11 +1179,8 @@ void GPUCmfd::constructMatrices() {
   /* Mark correction diffusion coefficient as valid for relaxation purposes */
   _old_dif_surf_valid = true;
 
-  /* Create the sparse matrices A and M in CSR format */
-  cusparseCreateCsr(&_A, size, size, A_num_nnz,
-                    dA_csrOffsets, dA_columns, dA_values,
-                    CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
-                    CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F);
+  /* Create sparse matrix _M in CSR format */
+  //NOTE _A is kept as three vectors for cuSPARSE
   cusparseCreateCsr(&_M, size, size, M_num_nnz,
                     dM_csrOffsets, dM_columns, dM_values,
                     CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
@@ -1104,15 +1201,34 @@ double GPUCmfd::solveEigenvalueProblem() {
   /* Initialize variables */
   int num_rows = getNumCells() * _num_cmfd_groups;
   int size = num_rows;
+
+  /* cuSPARSE parameters */
   cusparseHandle_t handle = 0;
-  void* dBuffer = NULL;
-  size_t bufferSize = 0;
-  cusparseCreate(&handle);
+  cudaStream_t stream = NULL;
+  cusparseMatDescr_t descrA = NULL;
+  const int algo = 0;
+  size_t lworkInBytes = 0;
+  char *d_work = NULL;
+  csrsm2Info_t info = NULL;
   float alpha = 1.0f;
   float beta = 0.0f;
   cusparseDnVecDescr_t d_new_flux, d_new_source, d_old_source;
   double residual, k_eff;
   int iter;
+
+  /* Buffers for matrix multiply and system inversion */
+  void*  dBuffer    = NULL;
+  void*  pBuffer    = NULL;
+
+  /* Create CUDA stream, bind to handle, initialize info */
+  cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
+  cusparseCreate(&handle);
+  cusparseSetStream(handle, stream);
+  cusparseCreateCsrsm2Info(&info);
+
+  /* Describe A */
+  cusparseSetMatType(descrA, CUSPARSE_MATRIX_TYPE_GENERAL);
+  cusparseSetMatDiagType(descrA, CUSPARSE_DIAG_TYPE_NON_UNIT);
 
   /* Get pointers to thrust arrays */
   FP_PRECISION* new_flux = thrust::raw_pointer_cast(&_new_flux[0]);
@@ -1134,23 +1250,23 @@ double GPUCmfd::solveEigenvalueProblem() {
   for (iter = 0; iter < MAX_LINALG_POWER_ITERATIONS; iter++) {
 
     /* Analyse linear system (once?) */
-    cusparseScsrsm2_analysis( handle,
-                             int                      algo,
-                             cusparseOperation_t      transA,
-                             cusparseOperation_t      transB,
-                             int                      m,
-                             int                      nrhs,
-                             int                      nnz,
-                             const float*             alpha,
-                             const cusparseMatDescr_t descrA,
-                             const float*             csrSortedValA,
-                             const int*               csrSortedRowPtrA,
-                             const int*               csrSortedColIndA,
-                             const float*             B,
-                             int                      ldb,
-                             csrsm2Info_t             info,
-                             cusparseSolvePolicy_t    policy,
-                             void*                    pBuffer)
+    cusparseScsrsm2_analysis(handle,
+                             algo,
+                             CUSPARSE_OPERATION_NON_TRANSPOSE,
+                             CUSPARSE_OPERATION_NON_TRANSPOSE,
+                             size,
+                             1,
+                             _A_num_nnz,
+                             &alpha,
+                             descrA,
+                             dA_values,
+                             thrust::raw_pointer_cast(&dev_dA_csrOffsets[0]),
+                             dA_columns,
+                             new_flux,
+                             size,
+                             info,
+                             CUSPARSE_SOLVE_POLICY_NO_LEVEL,
+                             pBuffer);
 
     /* Solve X = A^-1 * old_source */
 
@@ -1177,7 +1293,7 @@ double GPUCmfd::solveEigenvalueProblem() {
                       1.0 / k_eff * thrust::placeholders::_1);
 
     /* Compute the residual */
-    //residual = computeRMSE(&new_source, &old_source, true, comm);
+    residual = computeResidual();
     if (iter == 0) {
       initial_residual = residual;
       if (initial_residual < 1e-14)
@@ -1213,6 +1329,69 @@ double GPUCmfd::solveEigenvalueProblem() {
 
   return k_eff;
 }
+
+
+/**
+ * @brief Computes the residual between source iterations.
+ * @return the average residual in each flat source region
+ */
+double GPUCmfd::computeResidual() {
+
+  int norm;
+  double residual;
+  isinf_test inf_test;
+  isnan_test nan_test;
+
+  /* Allocate Thrust vector for residuals in each FSR */
+  thrust::device_vector<double> residuals(_num_FSRs);
+
+  norm = _num_FSRs;
+
+  /* Allocate Thrust vector for residuals */
+  thrust::device_vector<CMFD_PRECISION> fp_residuals(_num_FSRs * _num_cmfd_groups);
+  thrust::device_vector<CMFD_PRECISION> FSR_fp_residuals(_num_FSRs);
+
+  /* Compute the relative flux change in each FSR and group */
+  thrust::transform(_new_source.begin(), _new_source.end(),
+                    _old_source.begin(), fp_residuals.begin(),
+                    thrust::minus<CMFD_PRECISION>());
+  thrust::transform(fp_residuals.begin(), fp_residuals.end(),
+                    _old_source.begin(), fp_residuals.begin(),
+                    thrust::divides<CMFD_PRECISION>());
+
+  /* Replace INF and NaN values (from divide by zero) with 0. */
+  thrust::replace_if(fp_residuals.begin(), fp_residuals.end(), inf_test, 0);
+  thrust::replace_if(fp_residuals.begin(), fp_residuals.end(), nan_test, 0);
+
+  /* Square the residuals */
+  thrust::transform(fp_residuals.begin(), fp_residuals.end(),
+                    fp_residuals.begin(), fp_residuals.begin(),
+                    thrust::multiplies<CMFD_PRECISION>());
+
+  typedef thrust::device_vector<CMFD_PRECISION>::iterator Iterator;
+
+  /* Reduce flux residuals across energy groups within each FSR */
+  for (int e=0; e < _num_cmfd_groups; e++) {
+    strided_range<Iterator> strider(fp_residuals.begin() + e,
+                                    fp_residuals.end(), _num_cmfd_groups);
+    thrust::transform(FSR_fp_residuals.begin(), FSR_fp_residuals.end(),
+                      strider.begin(), FSR_fp_residuals.begin(),
+                      thrust::plus<CMFD_PRECISION>());
+  }
+
+  /* Copy the FP_PRECISION residual to the double precision residual */
+  thrust::copy(FSR_fp_residuals.begin(),
+               FSR_fp_residuals.end(), residuals.begin());
+
+  /* Sum up the residuals */
+  residual = thrust::reduce(residuals.begin(), residuals.end());
+
+  /* Normalize the residual */
+  residual = sqrt(residual / norm);
+
+  return residual;
+}
+
 
 /**
  * @brief Rescale the initial and converged flux arrays.
@@ -1329,11 +1508,12 @@ void GPUCmfd::setQuadrature(Quadrature* quadrature) {
                      cudaMemcpyHostToDevice);
 
   /* Copy the azimuthal weights to constant memory on the GPU */
-  int num_azim_2 = _quadrature->getNumAzimAngles() / 2;
-  FP_PRECISION host_azim_weights[num_azim_2 * _num_polar/2];
+  int num_azim_2 = _num_azim / 2;
+  FP_PRECISION host_azim_weights[num_azim_2];
+  log_printf(NORMAL, "%d", _num_polar); //, _quadrature); //, _quadrature->getAzimWeight(0));
+  log_printf(NORMAL, "%d", _num_azim); //, _quadrature); //, _quadrature->getAzimWeight(0));
   for (int a=0; a < num_azim_2; a++)
-    for (int p=0; p < _num_polar/2; p++)
-      host_azim_weights[a*_num_polar/2 + p] = _quadrature->getAzimWeight(a);
+    host_azim_weights[a] = _quadrature->getAzimWeight(a);
   cudaMemcpyToSymbol(azim_weights, host_azim_weights,
       num_azim_2 * sizeof(FP_PRECISION), 0, cudaMemcpyHostToDevice);
   getLastCudaError();

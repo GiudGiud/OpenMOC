@@ -4,10 +4,10 @@ import openmoc.plotter as plotter
 from openmoc.options import Options
 from lattices import lattices, universes, cells, surfaces
 
-use_gpu = False
+use_gpu = True
 
 if use_gpu:
-    from openmoc.cuda import GPUSolver
+    from openmoc.cuda import GPUSolver, GPUCmfd
 
 ###############################################################################
 #######################   Main Simulation Parameters   ########################
@@ -47,10 +47,13 @@ cells['Root'].setFill(lattices['Root'])
 
 log.py_printf('NORMAL', 'Creating Cmfd mesh...')
 
-cmfd = openmoc.Cmfd()
+if not use_gpu:
+    cmfd = openmoc.Cmfd()
+else:
+    cmfd = GPUCmfd()
 cmfd.setSORRelaxationFactor(1.5)
 cmfd.setLatticeStructure(51,51)
-cmfd.setGroupStructure([[1,2,3], [4,5,6,7]])
+#cmfd.setGroupStructure([[1,2,3], [4,5,6,7]])
 cmfd.setCentroidUpdateOn(True)
 cmfd.setKNearest(3)
 

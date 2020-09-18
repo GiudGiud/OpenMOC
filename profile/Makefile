@@ -2,22 +2,22 @@
 # User Options
 #===============================================================================
 
-COMPILER       ?= mpi
+COMPILER       ?= gnu
 OPENMP         ?= yes
 OPTIMIZE       ?= yes
-DEBUG          ?= no
+DEBUG          ?= yes
 PROFILE        ?= no
 INFO           ?= no
 PRECISION      ?= single
 CMFD_PRECISION ?= single
-CUDA           ?= no
+CUDA           ?= yes
 
 #===============================================================================
 # Source Code List
 #===============================================================================
 
-case ?= models/run_time_standard/run_time_standard.cpp
-#case ?= models/assembly_1/load-assembly.cpp
+#case ?= models/run_time_standard/run_time_standard.cpp
+case ?= models/assembly_1/load-assembly.cpp
 #case ?= models/core/load-core.cpp
 
 source = \
@@ -137,7 +137,7 @@ endif
 # Debug Flags
 ifeq ($(DEBUG),yes)
   CFLAGS += -O0 -g -fno-omit-frame-pointer
-  CUDAFLAGS += -G
+  CUDAFLAGS += -O0 -g -G
 else
   ifeq ($(COMPILER),gnu)
     CFLAGS += -Wno-unused-result
@@ -207,7 +207,10 @@ ifeq ($(OPTIMIZE),yes)
     CFLAGS += -O3 -ffast-math -fvectorize -fpic
   endif
   ifeq ($(CUDA),yes)
-    CUDAFLAGS += --use_fast_math
+    CUDAFLAGS += --use_fast_math #--gpu-architecture=sm_50
+    ifeq ($(DEBUG),no)
+      CUDAFLAGS += -O3
+    endif
   endif
   # Set the number of groups at compile time
   #CFLAGS += -DNGROUPS=70
@@ -265,7 +268,7 @@ cases += $(case)
 
 programs = $(cases:.cpp=)
 program = $(case:.cpp=)
-$(info program is $(program))
+
 #===============================================================================
 # Targets to Build
 #===============================================================================

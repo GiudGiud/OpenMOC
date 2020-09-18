@@ -153,8 +153,8 @@ class configuration:
     sources['nvcc'] = ['openmoc/cuda/openmoc_cuda_wrap.cpp',
                        'src/accel/cuda/GPUQuery.cu',
                        'src/accel/cuda/clone.cu',
-                       'src/accel/cuda/GPUSolver.cu',
-                       'src/accel/cuda/GPUCmfd.cu']
+                       'src/accel/cuda/GPUCmfd.cu',
+                       'src/accel/cuda/GPUSolver.cu']
 
 
     ###########################################################################
